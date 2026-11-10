@@ -1,0 +1,275 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { Search, ShoppingCart, Menu, ChevronRight, Zap, Star, X, CheckCircle2 } from 'lucide-react';
+import { supabase } from './lib/supabase';
+
+export default function Home() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [settings, setSettings] = useState({
+    store_name: 'NEXA',
+    hero_title: '',
+    hero_subtitle: '',
+    hero_image: '' 
+  });
+  const [loading, setLoading] = useState(true);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderSuccess, setOrderSuccess] = useState(false);
+
+  useEffect(() => {
+    async function fetchData() {
+      const { data: pData } = await supabase.from('products').select('*').order('id', { ascending: false });
+      if (pData) setProducts(pData);
+
+      const { data: sData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
+      if (sData) setSettings(sData);
+
+      setLoading(false);
+    }
+    fetchData();
+  }, []);
+
+  const openCheckout = (product: any) => {
+    setSelectedProduct(product);
+    setIsModalOpen(true);
+    setOrderSuccess(false);
+  };
+
+  const handleCartClick = () => {
+    alert("কার্ট সিস্টেম শিঘ্রই যুক্ত করা হবে!");
+  };
+
+  const scrollToProducts = () => {
+    const productSection = document.getElementById('products-section');
+    if (productSection) {
+      productSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const isValidBDPhone = (phone: string) => {
+    const cleaned = phone.replace(/[\s-]/g, "");
+    if (/^01[3-9]\d{8}$/.test(cleaned)) return true;
+    if (/^(\+880|880)1[3-9]\d{8}$/.test(cleaned)) return true;
+    return false;
+  };
+
+  const handleOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) return alert("দয়া করে আপনার নাম লিখুন।");
+    if (!isValidBDPhone(formData.phone)) return alert("সঠিক মোবাইল নাম্বার দিন।");
+    if (formData.address.trim().length < 8) return alert("সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন।");
+
+    setIsSubmitting(true);
+    const cleanedPhone = formData.phone.replace(/[\s-]/g, "").replace(/^(\+880|880)/, "0");
+
+    const { error } = await supabase.from('orders').insert([{
+      customer_name: formData.name.trim(),
+      customer_phone: cleanedPhone,
+      customer_address: formData.address.trim(),
+      product_name: selectedProduct.name,
+      price: selectedProduct.price,
+      status: 'Pending'
+    }]);
+
+    if (!error) {
+      setOrderSuccess(true);
+      setFormData({ name: '', phone: '', address: '' });
+      setTimeout(() => setIsModalOpen(false), 3000);
+    } else {
+      alert("অর্ডার করতে সমস্যা হয়েছে: " + error.message);
+    }
+    setIsSubmitting(false);
+  };
+
+  const sidebarCategories = [
+    "Fashion & Beauty", "Electronics", "Home & Living", 
+    "Health & Care", "Sports & Outdoors", "Toys & Games", 
+    "Groceries", "More Categories"
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#f5f5f5] text-[#212121] font-sans pb-20">
+      
+      {/* Checkout Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-[#111] border border-gray-800 rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
+            {!orderSuccess && <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white"><X size={20} /></button>}
+            {orderSuccess ? (
+              <div className="text-center py-8">
+                <CheckCircle2 size={60} className="text-emerald-500 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold text-white mb-2">Order Successful!</h3>
+                <p className="text-gray-400">Thank you! We will contact you soon.</p>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold text-white mb-1">Checkout</h3>
+                <p className="text-sm text-gray-400 mb-6">Order for <span className="text-purple-400 font-bold">{selectedProduct?.name}</span></p>
+                <form onSubmit={handleOrderSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Full Name</label>
+                    <input type="text" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-[#1a1a1a] border border-gray-800 text-white rounded-lg px-4 py-2.5 outline-none focus:border-purple-500 text-sm" placeholder="e.g. Rahim Uddin" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Phone Number</label>
+                    <input type="tel" required inputMode="numeric" maxLength={14} value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full bg-[#1a1a1a] border border-gray-800 text-white rounded-lg px-4 py-2.5 outline-none focus:border-purple-500 text-sm" placeholder="e.g. 01700000000" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Delivery Address</label>
+                    <textarea required value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} className="w-full bg-[#1a1a1a] border border-gray-800 text-white rounded-lg px-4 py-2.5 outline-none focus:border-purple-500 text-sm h-20 resize-none" placeholder="Full address..." />
+                  </div>
+                  <button type="submit" disabled={isSubmitting} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition shadow-lg">
+                    {isSubmitting ? "Processing..." : `Confirm Order (৳${selectedProduct?.price})`}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Top Bar */}
+      <div className="bg-[#0f1319] text-[#b1b5c0] text-[11px] py-1.5 px-4 md:px-10 hidden md:flex justify-end gap-6 font-medium border-b border-gray-800">
+        <span className="hover:text-white cursor-pointer transition">Save More on App</span>
+        <span className="hover:text-white cursor-pointer transition">Become a Seller</span>
+        <span className="hover:text-white cursor-pointer transition">Help & Support</span>
+        <span className="hover:text-white cursor-pointer transition">Login | Sign Up</span>
+      </div>
+
+      {/* Main Header */}
+      <header className="bg-[#0f1319] py-4 px-4 md:px-10 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-4">
+          <div className="md:hidden text-white cursor-pointer"><Menu size={24} /></div>
+          <div className="flex items-center gap-2 cursor-pointer">
+             <div className="w-8 h-8 bg-purple-600 flex items-center justify-center rounded">
+                <span className="text-white font-bold text-lg">N</span>
+             </div>
+             <h1 className="text-2xl md:text-3xl font-bold tracking-wide text-white uppercase">{settings.store_name}</h1>
+          </div>
+        </div>
+
+        <div className="hidden md:flex flex-1 max-w-[700px] mx-8 bg-white rounded overflow-hidden h-10">
+          <input type="text" placeholder={`Search in ${settings.store_name}...`} className="w-full bg-transparent px-4 py-2 outline-none text-sm text-black" />
+          <button className="bg-purple-50 px-5 flex items-center justify-center hover:bg-purple-100 transition border-l border-gray-200">
+            <Search size={18} className="text-purple-700" />
+          </button>
+        </div>
+
+        <div onClick={handleCartClick} className="relative cursor-pointer">
+          <ShoppingCart size={28} className="text-white hover:text-purple-400 transition" />
+          <span className="absolute -top-1 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full h-[18px] w-[18px] flex items-center justify-center">0</span>
+        </div>
+      </header>
+
+      {/* Main Body */}
+      <div className="max-w-[1200px] mx-auto px-4 pt-6">
+        
+        {/* HERO SECTION */}
+        <div className="flex gap-4 mb-6">
+          {/* Sidebar */}
+          <div className="w-[240px] bg-white rounded-lg shadow-sm hidden lg:flex flex-col py-2 border border-gray-100">
+            <div className="px-4 py-2 text-sm font-bold text-gray-800 flex items-center gap-2 border-b border-gray-100 mb-1">
+              <Menu size={18} /> All Categories
+            </div>
+            {sidebarCategories.map((cat, i) => (
+              <div key={i} className="px-4 py-2 text-[13px] text-gray-600 hover:text-purple-700 hover:bg-purple-50 cursor-pointer flex justify-between items-center transition group">
+                <span>{cat}</span>
+                <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition text-purple-700" />
+              </div>
+            ))}
+          </div>
+
+          {/* === একশো ভাগ পিওর ব্যানার সেকশন === */}
+          {/* এখানে কোনো পার্পেল বক্স, কোনো টেক্সট, কোনো বাটন নেই। পুরোটাই আপনার ছবি জুড়ে বসবে */}
+          <div className="flex-1 rounded-lg overflow-hidden shadow-sm h-[180px] sm:h-[250px] md:h-[350px] relative cursor-pointer" onClick={scrollToProducts}>
+            {settings.hero_image ? (
+               <img src={settings.hero_image} alt="NEXA Banner" className="w-full h-full object-cover" />
+            ) : (
+               <div className="w-full h-full bg-gray-200 flex flex-col items-center justify-center text-gray-500">
+                 <p className="font-bold">Admin Panel থেকে ব্যানার আপলোড করুন</p>
+               </div>
+            )}
+          </div>
+          {/* ব্যানার সেকশন শেষ */}
+
+        </div>
+
+        {/* Flash Sale Banner Strip */}
+        <div className="bg-[#1a1a1a] rounded-lg flex items-center justify-between p-4 mb-6 shadow-sm border border-gray-800 cursor-pointer" onClick={scrollToProducts}>
+           <div className="flex items-center gap-3">
+              <Zap size={28} className="text-yellow-400 fill-yellow-400" />
+              <div>
+                <h3 className="text-white font-bold text-xl leading-none">Flash Sale</h3>
+                <p className="text-gray-400 text-xs mt-1">On Sale Now</p>
+              </div>
+           </div>
+           
+           <div className="hidden md:flex">
+               <span className="text-yellow-400 font-bold italic text-2xl">Tech Deals Live Now</span>
+           </div>
+
+           <button className="bg-white text-black px-6 py-2 rounded-full text-sm font-bold hover:bg-gray-200 transition flex items-center gap-1">
+             Shop Now <ChevronRight size={16} />
+           </button>
+        </div>
+
+        {/* Products Section */}
+        <div id="products-section" className="bg-white rounded-lg shadow-sm p-4 mb-10 scroll-mt-24 border border-gray-200">
+          
+          <div className="flex items-center justify-between border-b border-gray-200 pb-3 mb-5">
+             <div className="flex items-center gap-2">
+                <Zap size={22} className="text-purple-600 fill-purple-600" /> 
+                <h3 className="text-xl font-bold text-gray-800">Flash Sale</h3>
+             </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {loading ? (
+              <p className="text-gray-500 col-span-full text-center py-10">Loading products...</p>
+            ) : products.length === 0 ? (
+              <p className="text-gray-500 col-span-full text-center py-10">No products found.</p>
+            ) : (
+              products.map((item) => (
+                <div key={item.id} className="bg-white hover:shadow-lg rounded-lg p-3 transition duration-300 group relative border border-gray-100 flex flex-col h-full">
+                  
+                  <div className="absolute top-2 right-2 bg-[#ff4d4f] text-white text-[11px] font-bold px-2 py-0.5 rounded-full z-10">
+                    -{Math.floor(Math.random() * 30 + 20)}%
+                  </div>
+                  
+                  <div className="aspect-square w-full bg-gray-50 rounded mb-3 flex items-center justify-center overflow-hidden">
+                    <img src={item.image_url !== 'https://via.placeholder.com/200' ? item.image_url : 'https://images.unsplash.com/photo-1523206489230-c012c64b2b48?w=500&q=80'} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                  </div>
+                  
+                  <h4 className="text-[13px] text-[#212121] leading-snug line-clamp-2 h-9 mb-2 font-medium">{item.name}</h4>
+                  
+                  <div className="mt-auto pt-2 border-t border-gray-50">
+                    <div className="flex justify-between items-end mb-3">
+                       <div>
+                         <p className="text-purple-600 font-bold text-lg leading-none mb-1">৳{item.price}</p>
+                         <p className="text-gray-400 text-[11px] line-through">৳{Number(item.price) + 500}</p>
+                       </div>
+                       <div className="flex text-yellow-400 text-[10px]">
+                         <Star size={12} className="fill-yellow-400" />
+                         <span className="text-gray-500 ml-1 text-xs">5.0</span>
+                       </div>
+                    </div>
+                    
+                    <button onClick={() => openCheckout(item)} className="w-full bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white py-2 rounded text-xs font-bold transition flex justify-center items-center gap-1">
+                      <ShoppingCart size={14} /> Buy Now
+                    </button>
+                  </div>
+
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
