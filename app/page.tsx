@@ -188,7 +188,7 @@ export default function NexaStore() {
       : cart.map(c => `${c.name} (${c.qty}x)`).join(', ');
 
     const rawCleanPrice = selectedProduct 
-      ? String(selectedProduct.price).replace(/[^0-9.]/g, '')
+      ? String(selectedProduct.price).replace(/[^0-9]/g, '')
       : String(cartTotal);
 
     const paymentNote = paymentMethod === 'cod'
@@ -555,20 +555,20 @@ export default function NexaStore() {
         </div>
       )}
 
-      {/* 👑 1. TOP UTILITY BAR (হুবহু আগের মতো, শুধু ক্লিকে হেল্প পপআপ খোলে) */}
+      {/* 👑 1. TOP UTILITY BAR */}
       <div className="bg-[#050505] text-gray-400 text-[11px] border-b border-amber-950/40">
-        <div className="max-w-[1340px] mx-auto px-4 py-1.5 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1 text-amber-400 font-bold">
+        <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-1.5 flex justify-between items-center gap-2">
+          <div className="flex items-center gap-4 shrink-0">
+            <span className="flex items-center gap-1 text-amber-400 font-bold whitespace-nowrap">
               👑 Welcome to Nexa!
             </span>
-            <span className="hidden md:flex items-center gap-1 text-gray-400">
+            <span className="hidden md:flex items-center gap-1 text-gray-400 whitespace-nowrap">
               <Truck size={12} className="text-amber-400" /> Free Delivery All Over Bangladesh
             </span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="hover:text-amber-400 cursor-pointer">Save More on App</span>
-            <span className="hover:text-amber-400 cursor-pointer">Become a Seller</span>
+          <div className="flex items-center gap-3 md:gap-4 whitespace-nowrap">
+            <span className="hidden sm:inline hover:text-amber-400 cursor-pointer">Save More on App</span>
+            <span className="hidden sm:inline hover:text-amber-400 cursor-pointer">Become a Seller</span>
             <span onClick={openHelp} className="hover:text-amber-400 cursor-pointer">Help & Support</span>
             <span className="hover:text-amber-400 cursor-pointer">Login | Sign Up</span>
           </div>
@@ -577,22 +577,29 @@ export default function NexaStore() {
 
       {/* 👑 2. MAIN HEADER */}
       <header className="bg-[#0c0a07] border-b border-amber-500/20 sticky top-0 z-50 shadow-md">
-        <div className="max-w-[1340px] mx-auto px-4 py-2.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setSearchQuery(''); scrollToProducts(); }}>
+        <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-2.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5 md:gap-4">
+          <div className="flex items-center gap-2 cursor-pointer order-1" onClick={() => { setSearchQuery(''); scrollToProducts(); }}>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 rotate-45 flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.5)]">
               <span className="-rotate-45 font-black text-black text-xs">N</span>
             </div>
-            <h1 className="text-2xl font-black tracking-widest text-white ml-1">{settings.store_name}</h1>
+            <h1 className="text-xl sm:text-2xl font-black tracking-widest text-white ml-1">{settings.store_name}</h1>
+          </div>
+
+          <div onClick={() => setIsCartOpen(true)} className="relative cursor-pointer p-1 order-2 md:order-3">
+            <ShoppingCart size={22} className="text-amber-400 hover:text-amber-300 transition" />
+            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center border-2 border-black">
+              {cart.reduce((a, b) => a + b.qty, 0)}
+            </span>
           </div>
 
           {/* 🔍 লাইভ সার্চ ইনপুট */}
-          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl mx-2 relative">
+          <form onSubmit={handleSearchSubmit} className="w-full md:w-auto md:flex-1 max-w-xl md:mx-2 relative order-3 md:order-2">
             <input 
               type="text" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={`Search in ${settings.store_name}... (e.g. iPhone, Watch, Pant)`} 
-              className="w-full bg-[#18140f] text-white rounded-full pl-5 pr-20 py-2 text-xs md:text-sm outline-none border border-amber-500/30 focus:border-amber-400 transition placeholder-gray-500"
+              className="w-full bg-[#18140f] text-white rounded-full pl-4 sm:pl-5 pr-16 sm:pr-20 py-2.5 md:py-2 text-xs md:text-sm outline-none border border-amber-500/30 focus:border-amber-400 transition placeholder-gray-500"
             />
             {searchQuery && (
               <button 
@@ -605,18 +612,11 @@ export default function NexaStore() {
             )}
             <button 
               type="submit"
-              className="absolute right-1 top-1/2 -translate-y-1/2 bg-gradient-to-r from-amber-400 to-yellow-500 text-black p-1.5 rounded-full hover:brightness-105 transition shadow-sm cursor-pointer"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-gradient-to-r from-amber-400 to-yellow-500 text-black p-1.5 rounded-full hover:brightness-105 transition shadow-sm cursor-pointer"
             >
               <Search size={15} />
             </button>
           </form>
-
-          <div onClick={() => setIsCartOpen(true)} className="relative cursor-pointer p-1">
-            <ShoppingCart size={22} className="text-amber-400 hover:text-amber-300 transition" />
-            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center border-2 border-black">
-              {cart.reduce((a, b) => a + b.qty, 0)}
-            </span>
-          </div>
         </div>
       </header>
 
@@ -648,40 +648,40 @@ export default function NexaStore() {
           </div>
 
           {/* Right Banner */}
-          <div className="lg:col-span-9 rounded-2xl bg-gradient-to-r from-[#0d0a06] via-[#1c1409] to-[#0a0805] p-6 md:p-10 relative overflow-hidden flex flex-col justify-center border-2 border-amber-500/40 shadow-xl min-h-[280px] md:min-h-[350px]">
+          <div className="lg:col-span-9 rounded-2xl bg-gradient-to-r from-[#0d0a06] via-[#1c1409] to-[#0a0805] p-5 sm:p-6 md:p-10 relative overflow-hidden flex flex-col justify-center border-2 border-amber-500/40 shadow-xl min-h-[220px] sm:min-h-[280px] md:min-h-[350px]">
             {settings.hero_image ? (
-              <img src={settings.hero_image} alt="Hero Banner" className="absolute inset-0 w-full h-full object-cover" />
+              <img src={settings.hero_image} alt="Hero Banner" className="absolute inset-0 w-full h-full object-cover object-center" />
             ) : (
               <>
                 <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute top-0 right-0 w-80 h-32 border-t-2 border-r-2 border-amber-400/40 rounded-tr-2xl pointer-events-none" />
 
-                <div className="relative z-10 max-w-sm md:max-w-md">
-                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-2">
+                <div className="relative z-10 max-w-[60%] sm:max-w-sm md:max-w-md">
+                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-1.5 sm:mb-2">
                     NEXA
                   </span>
-                  <h3 className="text-2xl md:text-3xl font-serif italic text-white font-bold leading-tight">
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-serif italic text-white font-bold leading-tight">
                     Big Fashion
                   </h3>
-                  <h2 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 italic tracking-tight leading-none mb-2">
+                  <h2 className="text-4xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 italic tracking-tight leading-none mb-1.5 sm:mb-2">
                     SALE
                   </h2>
-                  <p className="text-2xl md:text-3xl font-extrabold text-white mb-6">
+                  <p className="text-lg sm:text-2xl md:text-3xl font-extrabold text-white mb-4 sm:mb-6">
                     Up to <span className="text-amber-400">70% OFF</span>
                   </p>
                   <button 
                     onClick={scrollToProducts}
-                    className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black px-7 py-2.5 rounded-full text-xs shadow-lg shadow-amber-500/30 flex items-center gap-2 transition w-max cursor-pointer"
+                    className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black px-5 sm:px-7 py-2 sm:py-2.5 rounded-full text-xs shadow-lg shadow-amber-500/30 flex items-center gap-2 transition w-max cursor-pointer"
                   >
                     Shop Now <ArrowRight size={14} />
                   </button>
                 </div>
 
-                <div className="absolute right-4 md:right-16 bottom-0 top-0 hidden sm:flex items-end pointer-events-none">
+                <div className="absolute right-0 sm:right-4 md:right-16 bottom-0 top-0 flex items-end pointer-events-none">
                   <img 
                     src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80" 
                     alt="Nexa Model" 
-                    className="h-[105%] object-cover object-top drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)] filter brightness-105"
+                    className="h-[95%] sm:h-[105%] object-cover object-top drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)] filter brightness-105"
                   />
                 </div>
 
