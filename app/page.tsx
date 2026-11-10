@@ -8,7 +8,7 @@ import {
   Trophy, Gamepad2, ShoppingBag, LayoutGrid,
   Gift, Crown, Truck, Trash2, Flame, Copy, Check, ShieldCheck,
   Phone, Mail, MapPin, Headphones, ChevronUp, Send,
-    Globe as Facebook, Camera as Instagram, Play as Youtube, Music as Music2
+  Globe as Facebook, Camera as Instagram, Play as Youtube, Music as Music2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
@@ -22,6 +22,11 @@ export default function NexaStore() {
     hero_image: ''
   });
   const [loading, setLoading] = useState(true);
+
+  // 🔍 দারাজের মতো প্রোডাক্ট ডিটেইলস পেজ এবং ইমেজ জুম স্টেট
+  const [viewingProduct, setViewingProduct] = useState<any>(null);
+  const [detailQty, setDetailQty] = useState<number>(1);
+  const [isImageZoomOpen, setIsImageZoomOpen] = useState<boolean>(false);
   
   // Checkout Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -56,6 +61,14 @@ export default function NexaStore() {
   const openHelp = () => setIsHelpOpen(true);
   const closeHelp = () => setIsHelpOpen(false);
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // প্রোডাক্টের বিস্তারিত পেজ ওপেন করার ফাংশন (Daraz Style)
+  const openProductDetails = (product: any) => {
+    setViewingProduct(product);
+    setDetailQty(1);
+    setIsImageZoomOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // ব্যাকআপ প্রোডাক্ট তালিকা (ক্যাটাগরিসহ নিখুঁত ম্যাপিং)
   const defaultProducts = [
@@ -106,18 +119,19 @@ export default function NexaStore() {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    scrollToProducts();
+    setViewingProduct(null);
+    setTimeout(() => scrollToProducts(), 100);
   };
 
   // কার্ট লজিক
-  const addToCart = (product: any, e?: React.MouseEvent) => {
+  const addToCart = (product: any, e?: React.MouseEvent, customQty: number = 1) => {
     if (e) e.stopPropagation();
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
-        return prev.map(item => item.id === product.id ? { ...item, qty: item.qty + 1 } : item);
+        return prev.map(item => item.id === product.id ? { ...item, qty: item.qty + customQty } : item);
       }
-      return [...prev, { ...product, qty: 1 }];
+      return [...prev, { ...product, qty: customQty }];
     });
     setIsCartOpen(true);
   };
@@ -142,7 +156,8 @@ export default function NexaStore() {
   }, 0);
 
   // চেকআউট লজিক
-  const openCheckout = (product: any) => {
+  const openCheckout = (product: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setSelectedProduct(product);
     setPaymentMethod('cod');
     setTrxId('');
@@ -188,7 +203,7 @@ export default function NexaStore() {
       : cart.map(c => `${c.name} (${c.qty}x)`).join(', ');
 
     const rawCleanPrice = selectedProduct 
-      ? String(selectedProduct.price).replace(/[^0-9]/g, '')
+      ? String(selectedProduct.price).replace(/[^0-9.]/g, '')
       : String(cartTotal);
 
     const paymentNote = paymentMethod === 'cod'
@@ -255,6 +270,28 @@ export default function NexaStore() {
 
   return (
     <div className="min-h-screen bg-[#080808] text-white font-sans selection:bg-amber-500 selection:text-black pb-20">
+
+      {/* 🖼️ FULL SCREEN IMAGE LIGHTBOX (ছবির ওপর ক্লিক করলে বড় করে দেখার পপআপ) */}
+      {isImageZoomOpen && viewingProduct && (
+        <div 
+          onClick={() => setIsImageZoomOpen(false)}
+          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 cursor-zoom-out"
+        >
+          <button 
+            onClick={() => setIsImageZoomOpen(false)}
+            className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer"
+          >
+            <X size={22} />
+          </button>
+          <img 
+            src={viewingProduct.image_url} 
+            alt={viewingProduct.name} 
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-[82vh] object-contain rounded-xl border border-amber-500/30 shadow-2xl cursor-default"
+          />
+          <p className="text-xs text-gray-300 mt-3 font-semibold text-center max-w-md">{viewingProduct.name}</p>
+        </div>
+      )}
 
       {/* 🛍️ CART DRAWER */}
       {isCartOpen && (
@@ -464,7 +501,6 @@ export default function NexaStore() {
                           ? 'bg-[#1a0d14] border-[#E2136E]/60 shadow-[0_0_25px_rgba(226,19,110,0.15)]' 
                           : 'bg-[#1c110a] border-[#F7941D]/60 shadow-[0_0_25px_rgba(247,148,29,0.15)]'
                       }`}>
-                        {/* গেটওয়ে হেডার */}
                         <div className={`px-3.5 py-2 flex items-center justify-between text-white ${
                           paymentMethod === 'bkash'
                             ? 'bg-gradient-to-r from-[#E2136E] to-[#a80b50]'
@@ -480,9 +516,7 @@ export default function NexaStore() {
                           </span>
                         </div>
 
-                        {/* গেটওয়ে বডি */}
                         <div className="p-3.5 space-y-3">
-                          {/* নাম্বার কপি করার বক্স */}
                           <div className="bg-black/40 border border-white/10 rounded-lg p-2.5 flex items-center justify-between">
                             <div>
                               <p className="text-[10px] text-gray-400">পার্সোনাল নাম্বার (Send Money করুন)</p>
@@ -503,13 +537,11 @@ export default function NexaStore() {
                             </button>
                           </div>
 
-                          {/* ছোট নির্দেশনা */}
                           <div className="text-[11px] text-gray-300 space-y-1 bg-white/5 p-2.5 rounded-lg">
                             <p>১. উপরের নাম্বারে <b className="text-white">৳{payableAmount}</b> টাকা <b className="text-amber-400">Send Money</b> করুন।</p>
                             <p>২. টাকা পাঠানোর পর মেসেজে পাওয়া <b className="text-white">Transaction ID</b> বা যে নাম্বার থেকে পাঠিয়েছেন তার শেষ ৪ ডিজিট নিচে লিখুন:</p>
                           </div>
 
-                          {/* TrxID ইনপুট */}
                           <div>
                             <input
                               type="text"
@@ -578,7 +610,7 @@ export default function NexaStore() {
       {/* 👑 2. MAIN HEADER */}
       <header className="bg-[#0c0a07] border-b border-amber-500/20 sticky top-0 z-50 shadow-md">
         <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-2.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5 md:gap-4">
-          <div className="flex items-center gap-2 cursor-pointer order-1" onClick={() => { setSearchQuery(''); scrollToProducts(); }}>
+          <div className="flex items-center gap-2 cursor-pointer order-1" onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToTop(); }}>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 rotate-45 flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.5)]">
               <span className="-rotate-45 font-black text-black text-xs">N</span>
             </div>
@@ -597,7 +629,7 @@ export default function NexaStore() {
             <input 
               type="text" 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); if (viewingProduct) setViewingProduct(null); }}
               placeholder={`Search in ${settings.store_name}... (e.g. iPhone, Watch, Pant)`} 
               className="w-full bg-[#18140f] text-white rounded-full pl-4 sm:pl-5 pr-16 sm:pr-20 py-2.5 md:py-2 text-xs md:text-sm outline-none border border-amber-500/30 focus:border-amber-400 transition placeholder-gray-500"
             />
@@ -620,329 +652,597 @@ export default function NexaStore() {
         </div>
       </header>
 
-      {/* 👑 3. HERO CONTAINER */}
-      <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-3">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
-          
-          {/* Left Categories Sidebar */}
-          <div className="hidden lg:block lg:col-span-3 bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
-            <div className="flex items-center gap-2 font-bold text-white text-xs mb-3 pb-2 border-b border-amber-500/20">
-              <Menu size={16} className="text-amber-400" />
-              <span>All Categories</span>
-            </div>
-            <ul className="space-y-1">
-              {sidebarCategories.map((cat, i) => (
-                <li 
-                  key={i} 
-                  onClick={() => { setSearchQuery(cat.query); scrollToProducts(); }}
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-300 hover:bg-amber-500/10 hover:text-amber-400 cursor-pointer transition"
-                >
-                  <span className="flex items-center gap-2.5">
-                    {cat.icon}
-                    {cat.name}
-                  </span>
-                  <ChevronRight size={13} className="text-amber-500/40" />
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Right Banner */}
-          <div className="lg:col-span-9 rounded-2xl bg-gradient-to-r from-[#0d0a06] via-[#1c1409] to-[#0a0805] p-5 sm:p-6 md:p-10 relative overflow-hidden flex flex-col justify-center border-2 border-amber-500/40 shadow-xl min-h-[220px] sm:min-h-[280px] md:min-h-[350px]">
-            {settings.hero_image ? (
-              <img src={settings.hero_image} alt="Hero Banner" className="absolute inset-0 w-full h-full object-cover object-center" />
-            ) : (
-              <>
-                <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute top-0 right-0 w-80 h-32 border-t-2 border-r-2 border-amber-400/40 rounded-tr-2xl pointer-events-none" />
-
-                <div className="relative z-10 max-w-[60%] sm:max-w-sm md:max-w-md">
-                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest inline-block mb-1.5 sm:mb-2">
-                    NEXA
-                  </span>
-                  <h3 className="text-xl sm:text-2xl md:text-3xl font-serif italic text-white font-bold leading-tight">
-                    Big Fashion
-                  </h3>
-                  <h2 className="text-4xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 italic tracking-tight leading-none mb-1.5 sm:mb-2">
-                    SALE
-                  </h2>
-                  <p className="text-lg sm:text-2xl md:text-3xl font-extrabold text-white mb-4 sm:mb-6">
-                    Up to <span className="text-amber-400">70% OFF</span>
-                  </p>
-                  <button 
-                    onClick={scrollToProducts}
-                    className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black px-5 sm:px-7 py-2 sm:py-2.5 rounded-full text-xs shadow-lg shadow-amber-500/30 flex items-center gap-2 transition w-max cursor-pointer"
-                  >
-                    Shop Now <ArrowRight size={14} />
-                  </button>
-                </div>
-
-                <div className="absolute right-0 sm:right-4 md:right-16 bottom-0 top-0 flex items-end pointer-events-none">
-                  <img 
-                    src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80" 
-                    alt="Nexa Model" 
-                    className="h-[95%] sm:h-[105%] object-cover object-top drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)] filter brightness-105"
-                  />
-                </div>
-
-                <div className="absolute right-8 top-10 hidden md:block text-right pointer-events-none">
-                  <p className="text-2xl font-serif italic text-amber-200/90 leading-tight">Be Stylish</p>
-                  <p className="text-3xl font-serif italic font-bold text-white">Be Nexa</p>
-                </div>
-              </>
-            )}
-          </div>
-
-        </div>
-
-        {/* ⚡ 4. [আসল গোল্ডেন স্ট্রিপ] */}
-        <div className="mt-4 bg-gradient-to-r from-[#0c0904] via-[#1a1308] to-[#0c0904] rounded-2xl p-3 md:p-3.5 border border-amber-500/40 shadow-lg shadow-amber-500/10 flex flex-wrap items-center justify-between gap-4 text-white">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 text-black flex items-center justify-center font-bold shadow-md shadow-amber-500/20">
-              <Zap size={20} fill="currentColor" />
-            </div>
-            <div>
-              <h4 className="text-white text-sm font-black tracking-wide leading-tight">Flash Sale</h4>
-              <p className="text-[11px] text-amber-400 font-semibold">On Sale Now</p>
-            </div>
-            <button 
-              onClick={scrollToProducts}
-              className="w-7 h-7 rounded-full border border-amber-400/40 hover:border-amber-400 flex items-center justify-center text-amber-400 hover:bg-amber-400/10 transition ml-1 cursor-pointer"
-            >
-              <ArrowRight size={13} />
-            </button>
-          </div>
-
-          <div className="hidden lg:flex items-center gap-3 border-x border-amber-500/20 px-8">
-            <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400">
-              <Gift size={22} className="animate-pulse" />
-            </div>
-            <div>
-              <p className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 leading-tight">
-                Up to 80% OFF
-              </p>
-              <p className="text-[11px] text-gray-400 font-medium">Limited Time Offer</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 ml-auto">
-            <div className="flex items-center gap-2">
-              <Crown size={22} className="text-amber-400 fill-amber-400" />
-              <div>
-                <p className="text-sm font-black text-white leading-tight">Tech Deals</p>
-                <p className="text-[11px] text-amber-400 font-bold">Live Now</p>
-              </div>
-            </div>
-            <button 
-              onClick={scrollToProducts}
-              className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black text-xs px-5 py-2 rounded-full shadow-md shadow-amber-500/30 flex items-center gap-1.5 transition ml-2 cursor-pointer"
-            >
-              Shop Now <ArrowRight size={13} />
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ⚡ 5. FLASH SALE PRODUCTS */}
-      <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-8">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Zap size={20} className="text-amber-400 fill-amber-400" />
-            <div>
-              <h3 className="text-base font-black text-white leading-none">Flash Sale</h3>
-              <span className="text-[11px] text-amber-400 font-semibold">On Sale Now</span>
-            </div>
-          </div>
-          <button 
-            onClick={() => { setSearchQuery(''); scrollToProducts(); }}
-            className="text-[11px] font-bold text-amber-400 hover:text-white border border-amber-500/40 hover:border-amber-400 px-3 py-1 rounded transition uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-          >
-            Shop All Products <ArrowRight size={12} />
-          </button>
-        </div>
-
-        {/* Top Flash Sale Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-          {products.slice(0, 6).map((item) => (
-            <div 
-              key={item.id} 
-              className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group"
-            >
-              <div>
-                <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                  <img 
-                    src={item.image_url} 
-                    alt={item.name} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
-                  <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                    {item.discount || '-40%'}
-                  </span>
-                </div>
-
-                <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                  {item.name}
-                </h4>
-
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-amber-400 font-black text-sm">
-                    ৳{item.price?.toString().replace(/[^0-9]/g, '')}
-                  </span>
-                  {item.original_price && (
-                    <span className="text-gray-500 line-through text-[10px]">
-                      ৳{item.original_price?.toString().replace(/[^0-9]/g, '')}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                  <Star size={10} fill="currentColor" />
-                  <span className="ml-1 text-gray-400">{item.rating || '4.8 (1.2k)'}</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => openCheckout(item)}
-                className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-1.5 rounded-lg text-[11px] shadow-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-              >
-                Buy Now
+      {/* ===================================================================== */}
+      {/* 🛍️ DARAZ-STYLE PRODUCT DETAILS PAGE (প্রোডাক্টে ক্লিক করলে এটি ওপেন হবে) */}
+      {/* ===================================================================== */}
+      {viewingProduct ? (
+        <div className="max-w-[1340px] mx-auto px-3 md:px-4 mt-4 animate-in fade-in duration-200">
+          {/* উপরের Back ও Breadcrumb বার */}
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#110e0a] border border-amber-500/20 rounded-xl px-3.5 py-2.5 mb-4">
+            <div className="flex items-center gap-1.5 text-xs text-gray-400 overflow-hidden">
+              <button onClick={() => setViewingProduct(null)} className="text-amber-400 font-bold hover:underline cursor-pointer shrink-0">
+                Home
               </button>
+              <ChevronRight size={13} className="shrink-0" />
+              <span className="text-gray-400 shrink-0">{viewingProduct.category || 'Product'}</span>
+              <ChevronRight size={13} className="shrink-0" />
+              <span className="text-white font-semibold truncate">{viewingProduct.name}</span>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 🔲 6. CATEGORIES SECTION */}
-      <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
-        <div className="bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <LayoutGrid size={18} className="text-amber-400" />
-              <h3 className="text-sm font-bold text-white">Categories</h3>
-            </div>
-            <span className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer" onClick={() => { setSearchQuery(''); scrollToProducts(); }}>
-              See All <ArrowRight size={12} />
-            </span>
+            <button
+              onClick={() => setViewingProduct(null)}
+              className="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-400 text-xs font-bold px-3 py-1 rounded-lg transition cursor-pointer shrink-0"
+            >
+              ← সব প্রোডাক্টে ফিরে যান
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
-            {visualCategories.map((cat, i) => (
+          {/* প্রোডাক্টের মূল বক্স (Daraz 3-Column Layout) */}
+          <div className="bg-[#120f0a] border border-amber-500/30 rounded-2xl p-4 md:p-6 shadow-2xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* ১. বাম পাশ: প্রোডাক্টের বড় ছবি ও জুম অপশন */}
+            <div className="lg:col-span-4 flex flex-col gap-3">
               <div 
-                key={i} 
-                onClick={() => { setSearchQuery(cat.query); scrollToProducts(); }}
-                className="bg-[#18140f] hover:bg-[#221c15] p-2.5 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition border border-amber-500/10 hover:border-amber-400/40 group"
+                onClick={() => setIsImageZoomOpen(true)}
+                className="relative w-full aspect-square bg-[#1b1610] rounded-xl overflow-hidden border border-amber-500/20 flex items-center justify-center group cursor-zoom-in"
               >
-                <div className="w-12 h-12 rounded-lg overflow-hidden mb-1.5 bg-[#251e15] p-1 shadow-xs flex items-center justify-center">
-                  <img src={cat.img} alt={cat.name} className="w-full h-full object-cover rounded group-hover:scale-110 transition duration-300" />
-                </div>
-                <span className="text-[10px] font-bold text-gray-300 line-clamp-1 group-hover:text-amber-400 transition">
-                  {cat.name}
+                <img 
+                  src={viewingProduct.image_url} 
+                  alt={viewingProduct.name} 
+                  className="w-full h-full object-contain sm:object-cover group-hover:scale-105 transition duration-300"
+                />
+                <span className="absolute top-2.5 right-2.5 bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-md shadow">
+                  {viewingProduct.discount || '-40%'}
                 </span>
+                <div className="absolute bottom-2.5 inset-x-2.5 bg-black/75 backdrop-blur-xs text-center py-1.5 rounded-lg text-[11px] text-amber-300 font-semibold border border-white/10">
+                  🔍 ছবির ওপর ক্লিক করে ফুল-স্ক্রিনে বড় করে দেখুন
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* 🔥 7. JUST FOR YOU */}
-      <div id="just-for-you" className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2">
-            <Flame size={20} className="text-amber-400 fill-amber-400" />
-            <div>
-              <h3 className="text-base font-black text-white leading-tight">
-                {searchQuery ? `Products in: "${searchQuery}"` : "Just For You"}
-              </h3>
-              <p className="text-[11px] text-amber-400/80 font-medium">
-                {searchQuery ? `${filteredProducts.length} items found` : "Top trending items for you"}
-              </p>
-            </div>
-          </div>
-
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="text-xs bg-[#1c1812] border border-amber-500/40 hover:border-amber-400 text-amber-400 px-3 py-1 rounded-full transition flex items-center gap-1 cursor-pointer"
-            >
-              Show All Products <X size={12} />
-            </button>
-          )}
-        </div>
-
-        {filteredProducts.length === 0 ? (
-          <div className="text-center py-16 bg-[#110e0a] rounded-2xl border border-amber-500/20">
-            <Search size={40} className="text-gray-600 mx-auto mb-3" />
-            <h4 className="text-lg font-bold text-gray-300">"{searchQuery}" দিয়ে কোনো প্রোডাক্ট পাওয়া যায়নি</h4>
-            <p className="text-xs text-gray-500 mt-1">অন্য কোনো নাম দিয়ে সার্চ করুন অথবা ফিল্টার ক্লিয়ার করুন।</p>
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="mt-4 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-bold text-xs px-5 py-2 rounded-full cursor-pointer"
-            >
-              সব প্রোডাক্ট দেখুন
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-            {filteredProducts.map((item) => (
-              <div 
-                key={item.id} 
-                className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group"
-              >
-                <div>
-                  <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                    <img 
-                      src={item.image_url} 
-                      alt={item.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                    <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                      {item.discount || '-35%'}
-                    </span>
+              {/* ছোট থাম্বনেইল গ্যালারি */}
+              <div className="flex items-center gap-2.5">
+                <div 
+                  onClick={() => setIsImageZoomOpen(true)}
+                  className="w-16 h-16 rounded-lg overflow-hidden border-2 border-amber-400 bg-[#1b1610] p-0.5 cursor-pointer"
+                >
+                  <img src={viewingProduct.image_url} alt="" className="w-full h-full object-cover rounded" />
+                </div>
+                <div 
+                  onClick={() => setIsImageZoomOpen(true)}
+                  className="flex-1 bg-[#18140f] border border-amber-500/20 rounded-lg h-16 px-3 flex items-center justify-between cursor-pointer hover:border-amber-400 transition"
+                >
+                  <div>
+                    <p className="text-xs font-bold text-white">100% Real Product Photo</p>
+                    <p className="text-[10px] text-gray-400">ক্লিক করলে ছবিটি বড় হয়ে ওপেন হবে</p>
                   </div>
+                  <Search size={16} className="text-amber-400" />
+                </div>
+              </div>
+            </div>
 
-                  <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                    {item.name}
-                  </h4>
+            {/* ২. মাঝের অংশ: নাম, দাম, কোয়ান্টিটি এবং অর্ডার বাটন */}
+            <div className="lg:col-span-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-amber-500/20 pb-5 lg:pb-0 lg:pr-6">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                    {viewingProduct.category || 'Official Store'}
+                  </span>
+                  <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 size={11} /> In Stock
+                  </span>
+                </div>
 
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-amber-400 font-black text-sm">
-                      ৳{item.price?.toString().replace(/[^0-9]/g, '')}
+                <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-white leading-snug mb-2.5">
+                  {viewingProduct.name}
+                </h1>
+
+                {/* রেটিং ও ব্র্যান্ড */}
+                <div className="flex flex-wrap items-center gap-3 text-xs pb-3 mb-4 border-b border-amber-500/15">
+                  <div className="flex items-center text-amber-400 gap-1">
+                    <Star size={14} fill="currentColor" />
+                    <Star size={14} fill="currentColor" />
+                    <Star size={14} fill="currentColor" />
+                    <Star size={14} fill="currentColor" />
+                    <Star size={14} fill="currentColor" />
+                    <span className="text-gray-300 font-semibold ml-1">{viewingProduct.rating || '4.9 (1.2k Verified Ratings)'}</span>
+                  </div>
+                  <span className="text-gray-600">|</span>
+                  <span className="text-gray-400">Brand: <b className="text-amber-400">{settings.store_name} Original</b></span>
+                </div>
+
+                {/* প্রাইস বক্স */}
+                <div className="bg-[#18140f] border border-amber-500/25 rounded-xl p-3.5 mb-5">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-2xl sm:text-3xl font-black text-amber-400">
+                      ৳{Number(viewingProduct.price?.toString().replace(/[^0-9]/g, '')) * detailQty}
                     </span>
-                    {item.original_price && (
-                      <span className="text-gray-500 line-through text-[10px]">
-                        ৳{item.original_price?.toString().replace(/[^0-9]/g, '')}
+                    {viewingProduct.original_price && (
+                      <span className="text-sm text-gray-500 line-through font-semibold">
+                        ৳{Number(viewingProduct.original_price?.toString().replace(/[^0-9]/g, '')) * detailQty}
                       </span>
                     )}
+                    <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded">
+                      {viewingProduct.discount || '-40% OFF'}
+                    </span>
                   </div>
-
-                  <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                    <Star size={10} fill="currentColor" />
-                    <span className="ml-1 text-gray-400">{item.rating || '4.8 (850)'}</span>
-                  </div>
+                  <p className="text-[11px] text-emerald-400 mt-1 font-medium">
+                    ✓ প্রোডাক্ট হাতে পেয়ে দেখে টাকা পরিশোধ করার সুবিধা রয়েছে (Cash on Delivery)
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
+                {/* কোয়ান্টিটি সিলেক্টর */}
+                <div className="flex items-center gap-4 mb-6">
+                  <span className="text-xs font-bold text-gray-300">Quantity (পরিমাণ):</span>
+                  <div className="flex items-center gap-3 bg-[#1c1812] border border-amber-500/30 rounded-lg px-2.5 py-1">
+                    <button 
+                      type="button"
+                      onClick={() => setDetailQty(Math.max(1, detailQty - 1))}
+                      className="w-7 h-7 rounded bg-[#251e15] text-white font-black text-sm flex items-center justify-center hover:bg-amber-500 hover:text-black transition cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="text-sm font-black text-amber-400 min-w-[24px] text-center">{detailQty}</span>
+                    <button 
+                      type="button"
+                      onClick={() => setDetailQty(detailQty + 1)}
+                      className="w-7 h-7 rounded bg-[#251e15] text-white font-black text-sm flex items-center justify-center hover:bg-amber-500 hover:text-black transition cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buy Now & Add to Cart বাটন */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={(e) => addToCart(viewingProduct, e, detailQty)}
+                  className="bg-[#1c1812] hover:bg-amber-500/15 border-2 border-amber-400 text-amber-400 font-extrabold py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+                >
+                  <ShoppingCart size={17} /> Add to Cart
+                </button>
+                <button
+                  onClick={() => {
+                    const unitPrice = Number(viewingProduct.price?.toString().replace(/[^0-9]/g, '')) || 0;
+                    openCheckout({
+                      ...viewingProduct,
+                      name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
+                      price: String(unitPrice * detailQty)
+                    });
+                  }}
+                  className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-3 rounded-xl text-xs sm:text-sm shadow-lg shadow-amber-500/25 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                >
+                  <Zap size={16} fill="currentColor" /> এক্ষুনি অর্ডার করুন
+                </button>
+              </div>
+            </div>
+
+            {/* ৩. ডান পাশ: দারাজের মতো ডেলিভারি ও ওয়ারেন্টি ইনফরমেশন */}
+            <div className="lg:col-span-3 flex flex-col justify-between bg-[#16120c] rounded-xl p-4 border border-amber-500/20 space-y-4">
+              <div className="space-y-3">
+                <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider border-b border-amber-500/20 pb-2">
+                  Delivery & Service
+                </h4>
+                <div className="flex items-start gap-2.5 text-xs">
+                  <Truck size={17} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-white">সারাদেশে হোম ডেলিভারি</p>
+                    <p className="text-[11px] text-gray-400">ঢাকার ভেতরে ১-২ দিন, ঢাকার বাইরে ২-৪ দিন</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5 text-xs">
+                  <ShieldCheck size={17} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-white">ক্যাশ অন ডেলিভারি সুবিধা</p>
+                    <p className="text-[11px] text-gray-400">পণ্য হাতে পেয়ে চেক করে পেমেন্ট করুন</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2.5 text-xs">
+                  <CheckCircle2 size={17} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-white">৭ দিনের ইজি রিটার্ন ও রিপ্লেসমেন্ট</p>
+                    <p className="text-[11px] text-gray-400">কোনো সমস্যা থাকলে সহজেই পরিবর্তনযোগ্য</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* সরাসরি কল বা হোয়াটসঅ্যাপ অর্ডার বক্স */}
+              <div className="pt-3 border-t border-amber-500/20 space-y-2">
+                <p className="text-[11px] text-gray-400 font-semibold">সরাসরি কথা বলে অর্ডার করতে চান?</p>
+                <a 
+                  href={"tel:" + HELPLINE_NUMBER}
+                  className="w-full bg-[#1c1812] hover:bg-[#251f17] border border-amber-500/30 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition"
+                >
+                  <Phone size={14} className="text-amber-400" /> কল করুন: {HELPLINE_NUMBER}
+                </a>
+                <a 
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" (দাম: ৳${viewingProduct.price}) প্রোডাক্টটি অর্ডার করতে চাই।`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/50 text-[#25D366] text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition"
+                >
+                  <MessageCircle size={14} /> WhatsApp-এ অর্ডার করুন
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* প্রোডাক্টের বিস্তারিত বিবরণ (Product Details & Specifications) */}
+          <div className="mt-6 bg-[#120f0a] border border-amber-500/20 rounded-2xl p-4 md:p-6">
+            <h3 className="text-sm md:text-base font-extrabold text-amber-400 border-b border-amber-500/20 pb-2.5 mb-3">
+              প্রোডাক্টের বিস্তারিত বিবরণ (Product Details of {viewingProduct.name})
+            </h3>
+            <div className="text-xs sm:text-sm text-gray-300 space-y-2 leading-relaxed">
+              <p>✅ <b>পণ্যের নাম:</b> {viewingProduct.name}</p>
+              <p>✅ <b>ক্যাটাগরি:</b> {viewingProduct.category || 'Premium Collection'}</p>
+              <p>✅ <b>কোয়ালিটি:</b> ১০০% অরিজিনাল এবং প্রিমিয়াম কোয়ালিটি গ্যারান্টি।</p>
+              <p>✅ <b>ডেলিভারি:</b> সমগ্র বাংলাদেশে দ্রুততম হোম ডেলিভারি সুবিধা। পণ্য হাতে পেয়ে দেখে টাকা পরিশোধ করতে পারবেন।</p>
+              {viewingProduct.description && <p className="mt-2 text-gray-200">{viewingProduct.description}</p>}
+            </div>
+          </div>
+
+          {/* একই রকম আরও প্রোডাক্ট (Related Products) */}
+          <div className="mt-8">
+            <h3 className="text-base font-black text-white mb-3 flex items-center gap-2">
+              <Flame size={18} className="text-amber-400 fill-amber-400" /> আরও কিছু জনপ্রিয় প্রোডাক্ট
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+              {products.filter(p => p.id !== viewingProduct.id).slice(0, 6).map((item) => (
+                <div 
+                  key={item.id} 
+                  onClick={() => openProductDetails(item)}
+                  className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
+                >
+                  <div>
+                    <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    </div>
+                    <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400">{item.name}</h4>
+                    <span className="text-amber-400 font-black text-sm">৳{item.price?.toString().replace(/[^0-9]/g, '')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ===================================================================== */}
+          {/* 👑 3. HERO CONTAINER (মোবাইল ও পিসিতে ১০০% ফিট ব্যানার) */}
+          {/* ===================================================================== */}
+          <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-3">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+              
+              {/* Left Categories Sidebar */}
+              <div className="hidden lg:block lg:col-span-3 bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
+                <div className="flex items-center gap-2 font-bold text-white text-xs mb-3 pb-2 border-b border-amber-500/20">
+                  <Menu size={16} className="text-amber-400" />
+                  <span>All Categories</span>
+                </div>
+                <ul className="space-y-1">
+                  {sidebarCategories.map((cat, i) => (
+                    <li 
+                      key={i} 
+                      onClick={() => { setSearchQuery(cat.query); scrollToProducts(); }}
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-300 hover:bg-amber-500/10 hover:text-amber-400 cursor-pointer transition"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        {cat.icon}
+                        {cat.name}
+                      </span>
+                      <ChevronRight size={13} className="text-amber-500/40" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Right Banner — মোবাইলে পুরোপুরি সেট হবে, একটুও কাটবে না */}
+              <div className={`lg:col-span-9 rounded-2xl relative overflow-hidden border-2 border-amber-500/40 shadow-xl ${
+                settings.hero_image 
+                  ? 'bg-[#0d0a06] flex items-center justify-center min-h-[165px] sm:min-h-[260px] md:min-h-[350px]' 
+                  : 'bg-gradient-to-r from-[#0d0a06] via-[#1c1409] to-[#0a0805] p-4 sm:p-6 md:p-10 flex flex-col justify-center min-h-[190px] sm:min-h-[270px] md:min-h-[350px]'
+              }`}>
+                {settings.hero_image ? (
+                  <img 
+                    src={settings.hero_image} 
+                    alt="Hero Banner" 
+                    className="w-full h-auto max-h-[220px] sm:max-h-none sm:h-full object-contain sm:object-cover object-center block" 
+                  />
+                ) : (
+                  <>
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute top-0 right-0 w-80 h-32 border-t-2 border-r-2 border-amber-400/40 rounded-tr-2xl pointer-events-none" />
+
+                    <div className="relative z-10 max-w-[62%] sm:max-w-sm md:max-w-md">
+                      <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest inline-block mb-1 sm:mb-2">
+                        NEXA
+                      </span>
+                      <h3 className="text-lg sm:text-2xl md:text-3xl font-serif italic text-white font-bold leading-tight">
+                        Big Fashion
+                      </h3>
+                      <h2 className="text-3xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 italic tracking-tight leading-none mb-1 sm:mb-2">
+                        SALE
+                      </h2>
+                      <p className="text-sm sm:text-2xl md:text-3xl font-extrabold text-white mb-3 sm:mb-6">
+                        Up to <span className="text-amber-400">70% OFF</span>
+                      </p>
+                      <button 
+                        onClick={scrollToProducts}
+                        className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black px-4 sm:px-7 py-1.5 sm:py-2.5 rounded-full text-[11px] sm:text-xs shadow-lg shadow-amber-500/30 flex items-center gap-1.5 sm:gap-2 transition w-max cursor-pointer"
+                      >
+                        Shop Now <ArrowRight size={13} />
+                      </button>
+                    </div>
+
+                    <div className="absolute right-0 sm:right-4 md:right-16 bottom-0 top-0 w-[42%] sm:w-auto flex items-end justify-end pointer-events-none">
+                      <img 
+                        src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80" 
+                        alt="Nexa Model" 
+                        className="h-[96%] sm:h-[105%] w-full sm:w-auto object-cover object-top drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)] filter brightness-105"
+                      />
+                    </div>
+
+                    <div className="absolute right-8 top-10 hidden md:block text-right pointer-events-none">
+                      <p className="text-2xl font-serif italic text-amber-200/90 leading-tight">Be Stylish</p>
+                      <p className="text-3xl font-serif italic font-bold text-white">Be Nexa</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+            </div>
+
+            {/* ⚡ 4. [আসল গোল্ডেন স্ট্রিপ] */}
+            <div className="mt-4 bg-gradient-to-r from-[#0c0904] via-[#1a1308] to-[#0c0904] rounded-2xl p-3 md:p-3.5 border border-amber-500/40 shadow-lg shadow-amber-500/10 flex flex-wrap items-center justify-between gap-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 text-black flex items-center justify-center font-bold shadow-md shadow-amber-500/20">
+                  <Zap size={20} fill="currentColor" />
+                </div>
+                <div>
+                  <h4 className="text-white text-sm font-black tracking-wide leading-tight">Flash Sale</h4>
+                  <p className="text-[11px] text-amber-400 font-semibold">On Sale Now</p>
+                </div>
+                <button 
+                  onClick={scrollToProducts}
+                  className="w-7 h-7 rounded-full border border-amber-400/40 hover:border-amber-400 flex items-center justify-center text-amber-400 hover:bg-amber-400/10 transition ml-1 cursor-pointer"
+                >
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+
+              <div className="hidden lg:flex items-center gap-3 border-x border-amber-500/20 px-8">
+                <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400">
+                  <Gift size={22} className="animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 leading-tight">
+                    Up to 80% OFF
+                  </p>
+                  <p className="text-[11px] text-gray-400 font-medium">Limited Time Offer</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 ml-auto">
+                <div className="flex items-center gap-2">
+                  <Crown size={22} className="text-amber-400 fill-amber-400" />
+                  <div>
+                    <p className="text-sm font-black text-white leading-tight">Tech Deals</p>
+                    <p className="text-[11px] text-amber-400 font-bold">Live Now</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={scrollToProducts}
+                  className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black text-xs px-5 py-2 rounded-full shadow-md shadow-amber-500/30 flex items-center gap-1.5 transition ml-2 cursor-pointer"
+                >
+                  Shop Now <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          {/* ⚡ 5. FLASH SALE PRODUCTS */}
+          <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Zap size={20} className="text-amber-400 fill-amber-400" />
+                <div>
+                  <h3 className="text-base font-black text-white leading-none">Flash Sale</h3>
+                  <span className="text-[11px] text-amber-400 font-semibold">On Sale Now</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setSearchQuery(''); scrollToProducts(); }}
+                className="text-[11px] font-bold text-amber-400 hover:text-white border border-amber-500/40 hover:border-amber-400 px-3 py-1 rounded transition uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+              >
+                Shop All Products <ArrowRight size={12} />
+              </button>
+            </div>
+
+            {/* Top Flash Sale Cards (ক্লিক করলে প্রোডাক্টের ভেতরে ঢুকবে) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+              {products.slice(0, 6).map((item) => (
+                <div 
+                  key={item.id} 
+                  onClick={() => openProductDetails(item)}
+                  className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
+                >
+                  <div>
+                    <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                      <img 
+                        src={item.image_url} 
+                        alt={item.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      />
+                      <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                        {item.discount || '-40%'}
+                      </span>
+                    </div>
+
+                    <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
+                      {item.name}
+                    </h4>
+
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-amber-400 font-black text-sm">
+                        ৳{item.price?.toString().replace(/[^0-9]/g, '')}
+                      </span>
+                      {item.original_price && (
+                        <span className="text-gray-500 line-through text-[10px]">
+                          ৳{item.original_price?.toString().replace(/[^0-9]/g, '')}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
+                      <Star size={10} fill="currentColor" />
+                      <span className="ml-1 text-gray-400">{item.rating || '4.8 (1.2k)'}</span>
+                    </div>
+                  </div>
+
                   <button 
-                    onClick={(e) => addToCart(item, e)}
-                    className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <ShoppingCart size={11} /> Cart
-                  </button>
-                  <button 
-                    onClick={() => openCheckout(item)}
-                    className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
+                    onClick={(e) => openCheckout(item, e)}
+                    className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-1.5 rounded-lg text-[11px] shadow-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95"
                   >
                     Buy Now
                   </button>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* 🧾 8. FOOTER (আপনি ছবিতে যেটা দেখিয়েছেন) */}
+          {/* 🔲 6. CATEGORIES SECTION */}
+          <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
+            <div className="bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <LayoutGrid size={18} className="text-amber-400" />
+                  <h3 className="text-sm font-bold text-white">Categories</h3>
+                </div>
+                <span className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer" onClick={() => { setSearchQuery(''); scrollToProducts(); }}>
+                  See All <ArrowRight size={12} />
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
+                {visualCategories.map((cat, i) => (
+                  <div 
+                    key={i} 
+                    onClick={() => { setSearchQuery(cat.query); scrollToProducts(); }}
+                    className="bg-[#18140f] hover:bg-[#221c15] p-2.5 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition border border-amber-500/10 hover:border-amber-400/40 group"
+                  >
+                    <div className="w-12 h-12 rounded-lg overflow-hidden mb-1.5 bg-[#251e15] p-1 shadow-xs flex items-center justify-center">
+                      <img src={cat.img} alt={cat.name} className="w-full h-full object-cover rounded group-hover:scale-110 transition duration-300" />
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-300 line-clamp-1 group-hover:text-amber-400 transition">
+                      {cat.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 🔥 7. JUST FOR YOU (ক্লিক করলে প্রোডাক্টের বিস্তারিত পেজ ওপেন হবে) */}
+          <div id="just-for-you" className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Flame size={20} className="text-amber-400 fill-amber-400" />
+                <div>
+                  <h3 className="text-base font-black text-white leading-tight">
+                    {searchQuery ? `Products in: "${searchQuery}"` : "Just For You"}
+                  </h3>
+                  <p className="text-[11px] text-amber-400/80 font-medium">
+                    {searchQuery ? `${filteredProducts.length} items found` : "প্রোডাক্টের বিস্তারিত ও বড় ছবি দেখতে যেকোনো প্রোডাক্টের ওপর ক্লিক করুন"}
+                  </p>
+                </div>
+              </div>
+
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="text-xs bg-[#1c1812] border border-amber-500/40 hover:border-amber-400 text-amber-400 px-3 py-1 rounded-full transition flex items-center gap-1 cursor-pointer"
+                >
+                  Show All Products <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-16 bg-[#110e0a] rounded-2xl border border-amber-500/20">
+                <Search size={40} className="text-gray-600 mx-auto mb-3" />
+                <h4 className="text-lg font-bold text-gray-300">"{searchQuery}" দিয়ে কোনো প্রোডাক্ট পাওয়া যায়নি</h4>
+                <p className="text-xs text-gray-500 mt-1">অন্য কোনো নাম দিয়ে সার্চ করুন অথবা ফিল্টার ক্লিয়ার করুন।</p>
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="mt-4 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-bold text-xs px-5 py-2 rounded-full cursor-pointer"
+                >
+                  সব প্রোডাক্ট দেখুন
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                {filteredProducts.map((item) => (
+                  <div 
+                    key={item.id} 
+                    onClick={() => openProductDetails(item)}
+                    className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
+                  >
+                    <div>
+                      <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                        <img 
+                          src={item.image_url} 
+                          alt={item.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                          {item.discount || '-35%'}
+                        </span>
+                      </div>
+
+                      <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
+                        {item.name}
+                      </h4>
+
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-amber-400 font-black text-sm">
+                          ৳{item.price?.toString().replace(/[^0-9]/g, '')}
+                        </span>
+                        {item.original_price && (
+                          <span className="text-gray-500 line-through text-[10px]">
+                            ৳{item.original_price?.toString().replace(/[^0-9]/g, '')}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
+                        <Star size={10} fill="currentColor" />
+                        <span className="ml-1 text-gray-400">{item.rating || '4.8 (850)'}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
+                      <button 
+                        onClick={(e) => addToCart(item, e)}
+                        className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <ShoppingCart size={11} /> Cart
+                      </button>
+                      <button 
+                        onClick={(e) => openCheckout(item, e)}
+                        className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
+                      >
+                        Buy Now
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 🧾 8. FOOTER */}
       <footer className="mt-14 bg-[#0b0906] border-t border-amber-500/20">
         <div className="max-w-[1340px] mx-auto px-4 py-10 grid grid-cols-2 md:grid-cols-4 gap-8 text-left">
 
@@ -981,11 +1281,11 @@ export default function NexaStore() {
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Shop</h4>
             </div>
             <ul className="space-y-2 text-[11px] text-gray-400">
-              <li><button onClick={() => { setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">All Products</button></li>
-              <li><button onClick={() => { setSearchQuery('Electronics'); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">New Arrivals</button></li>
-              <li><button onClick={() => { setSearchQuery('Fashion'); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Best Sellers</button></li>
-              <li><button onClick={() => { setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Deals & Offers</button></li>
-              <li><button onClick={() => { setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Categories</button></li>
+              <li><button onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">All Products</button></li>
+              <li><button onClick={() => { setViewingProduct(null); setSearchQuery('Electronics'); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">New Arrivals</button></li>
+              <li><button onClick={() => { setViewingProduct(null); setSearchQuery('Fashion'); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Best Sellers</button></li>
+              <li><button onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Deals & Offers</button></li>
+              <li><button onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Categories</button></li>
             </ul>
           </div>
 
@@ -1041,7 +1341,7 @@ export default function NexaStore() {
         </div>
       </footer>
 
-      {/* ⬆️ Scroll to Top (ছবির উপরের গোল বাটন) */}
+      {/* ⬆️ Scroll to Top */}
       <button
         onClick={scrollToTop}
         title="উপরে যান"
@@ -1050,7 +1350,7 @@ export default function NexaStore() {
         <ChevronUp size={18} />
       </button>
 
-      {/* 💬 "কীভাবে সাহায্য করতে পারি?" পপআপ (ছবির হুবহু) */}
+      {/* 💬 "কীভাবে সাহায্য করতে পারি?" পপআপ */}
       {isHelpOpen && (
         <div className="fixed bottom-[136px] right-5 z-[140] w-[290px] max-w-[calc(100vw-40px)] bg-white rounded-2xl shadow-2xl overflow-hidden border border-neutral-200 animate-in slide-in-from-bottom-2 duration-200">
           <div className="px-4 pt-4 pb-3 border-b border-neutral-200 relative">
@@ -1101,7 +1401,7 @@ export default function NexaStore() {
         </div>
       )}
 
-      {/* 🎧 Floating Help Button (বন্ধ = হেডসেট, খোলা = X) */}
+      {/* 🎧 Floating Help Button */}
       <button
         onClick={() => (isHelpOpen ? closeHelp() : openHelp())}
         title={isHelpOpen ? "বন্ধ করুন" : "কাস্টমার কেয়ার"}
