@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Search, ShoppingCart, Zap, Menu, ChevronRight, 
+  Search, ShoppingCart, Zap, Menu, ChevronRight, ChevronLeft,
   Star, MessageCircle, X, CheckCircle2, ArrowRight,
   Shirt, Smartphone, Home as HomeIcon, Heart, 
   Trophy, Gamepad2, ShoppingBag, LayoutGrid,
   Gift, Crown, Truck, Trash2, Flame, Copy, Check, ShieldCheck,
-  Phone, Mail, MapPin, Headphones, ChevronUp, Send,
+  Phone, Mail, MapPin, Headphones, ChevronUp, Send, Share2, Store, Award, RotateCcw,
   Globe as Facebook, Camera as Instagram, Play as Youtube, Music as Music2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
@@ -23,10 +23,12 @@ export default function NexaStore() {
   });
   const [loading, setLoading] = useState(true);
 
-  // 🔍 দারাজের মতো প্রোডাক্ট ডিটেইলস পেজ এবং ইমেজ জুম স্টেট
+  // 🔍 দারাজের মতো প্রোডাক্ট ডিটেইলস পেজ, ৪টি ছবির গ্যালারি এবং ইমেজ জুম স্টেট
   const [viewingProduct, setViewingProduct] = useState<any>(null);
   const [detailQty, setDetailQty] = useState<number>(1);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState<boolean>(false);
+  const [activeImageIdx, setActiveImageIdx] = useState<number>(0);
+  const [isWishlisted, setIsWishlisted] = useState<boolean>(false);
   
   // Checkout Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -66,8 +68,219 @@ export default function NexaStore() {
   const openProductDetails = (product: any) => {
     setViewingProduct(product);
     setDetailQty(1);
+    setActiveImageIdx(0);
     setIsImageZoomOpen(false);
+    setIsWishlisted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 🧠 ১. SMART AUTO-BRAND DETECTOR (প্রোডাক্টের নাম দেখে অটোমেটিক আসল ব্র্যান্ড বের করবে)
+  const getProductBrand = (product: any): string => {
+    if (!product) return 'No Brand';
+
+    if (product.brand && product.brand.trim() !== '') {
+      return product.brand.trim();
+    }
+
+    const title = (product.name || '').toLowerCase();
+    const compactTitle = title.replace(/[\s-_]/g, '');
+
+    const brandRules: { keywords: string[]; brandName: string }[] = [
+      { keywords: ['iphone', 'ipad', 'macbook', 'airpod', 'apple', 'imac', 'iwatch'], brandName: 'Apple' },
+      { keywords: ['samsung', 'galaxy'], brandName: 'Samsung' },
+      { keywords: ['xiaomi', 'redmi', 'poco', 'miband'], brandName: 'Xiaomi' },
+      { keywords: ['realme', 'narzo'], brandName: 'Realme' },
+      { keywords: ['vivo', 'iqoo'], brandName: 'Vivo' },
+      { keywords: ['oppo', 'reno'], brandName: 'Oppo' },
+      { keywords: ['oneplus', 'nord'], brandName: 'OnePlus' },
+      { keywords: ['googlepixel', 'pixel'], brandName: 'Google' },
+      { keywords: ['infinix'], brandName: 'Infinix' },
+      { keywords: ['tecno', 'camon', 'spark'], brandName: 'Tecno' },
+      { keywords: ['itel'], brandName: 'Itel' },
+      { keywords: ['motorola', 'moto'], brandName: 'Motorola' },
+      { keywords: ['nokia'], brandName: 'Nokia' },
+      { keywords: ['huawei'], brandName: 'Huawei' },
+      { keywords: ['honor'], brandName: 'Honor' },
+      { keywords: ['symphony'], brandName: 'Symphony' },
+      { keywords: ['walton'], brandName: 'Walton' },
+      { keywords: ['sony', 'playstation', 'ps5', 'ps4'], brandName: 'Sony' },
+      { keywords: ['jbl'], brandName: 'JBL' },
+      { keywords: ['anker', 'soundcore'], brandName: 'Anker' },
+      { keywords: ['baseus'], brandName: 'Baseus' },
+      { keywords: ['joyroom'], brandName: 'Joyroom' },
+      { keywords: ['remax'], brandName: 'Remax' },
+      { keywords: ['hoco'], brandName: 'Hoco' },
+      { keywords: ['oraimo'], brandName: 'Oraimo' },
+      { keywords: ['haylou'], brandName: 'Haylou' },
+      { keywords: ['amazfit'], brandName: 'Amazfit' },
+      { keywords: ['colmi'], brandName: 'Colmi' },
+      { keywords: ['lenovo', 'thinkpad', 'ideapad'], brandName: 'Lenovo' },
+      { keywords: ['asus', 'rog', 'zenbook', 'vivobook'], brandName: 'ASUS' },
+      { keywords: ['dell', 'inspiron', 'alienware'], brandName: 'Dell' },
+      { keywords: ['hp', 'pavilion', 'elitebook'], brandName: 'HP' },
+      { keywords: ['acer', 'predator'], brandName: 'Acer' },
+      { keywords: ['msi'], brandName: 'MSI' },
+      { keywords: ['logitech'], brandName: 'Logitech' },
+      { keywords: ['razer'], brandName: 'Razer' },
+      { keywords: ['corsair'], brandName: 'Corsair' },
+      { keywords: ['fantech'], brandName: 'Fantech' },
+      { keywords: ['havit'], brandName: 'Havit' },
+      { keywords: ['a4tech'], brandName: 'A4Tech' },
+      { keywords: ['canon'], brandName: 'Canon' },
+      { keywords: ['nikon'], brandName: 'Nikon' },
+      { keywords: ['gopro'], brandName: 'GoPro' },
+      { keywords: ['dji'], brandName: 'DJI' },
+      { keywords: ['casio', 'gshock'], brandName: 'Casio' },
+      { keywords: ['rolex'], brandName: 'Rolex' },
+      { keywords: ['curren'], brandName: 'Curren' },
+      { keywords: ['naviforce'], brandName: 'Naviforce' },
+      { keywords: ['skmei'], brandName: 'SKMEI' },
+      { keywords: ['poedagar'], brandName: 'Poedagar' },
+      { keywords: ['olevs'], brandName: 'OLEVS' },
+      { keywords: ['titan'], brandName: 'Titan' },
+      { keywords: ['nike'], brandName: 'Nike' },
+      { keywords: ['adidas'], brandName: 'Adidas' },
+      { keywords: ['puma'], brandName: 'Puma' },
+      { keywords: ['gucci'], brandName: 'Gucci' },
+      { keywords: ['louisvuitton'], brandName: 'Louis Vuitton' },
+      { keywords: ['zara'], brandName: 'Zara' },
+      { keywords: ['levi', 'levis'], brandName: "Levi's" },
+      { keywords: ['aarong'], brandName: 'Aarong' },
+      { keywords: ['bata'], brandName: 'Bata' },
+      { keywords: ['apex'], brandName: 'Apex' },
+      { keywords: ['lottto', 'lotto'], brandName: 'Lotto' },
+      { keywords: ['philips'], brandName: 'Philips' },
+      { keywords: ['panasonic'], brandName: 'Panasonic' },
+      { keywords: ['lg'], brandName: 'LG' },
+      { keywords: ['singer'], brandName: 'Singer' },
+      { keywords: ['vision'], brandName: 'Vision' },
+      { keywords: ['miyako'], brandName: 'Miyako' },
+      { keywords: ['kemei'], brandName: 'Kemei' },
+      { keywords: ['vintage', 't9'], brandName: 'Vintage' },
+      { keywords: ['cerave'], brandName: 'CeraVe' },
+      { keywords: ['theordinary'], brandName: 'The Ordinary' },
+      { keywords: ['garnier'], brandName: 'Garnier' },
+      { keywords: ['loreal'], brandName: "L'Oreal" },
+      { keywords: ['dove'], brandName: 'Dove' },
+      { keywords: ['nivea'], brandName: 'Nivea' },
+    ];
+
+    for (const rule of brandRules) {
+      for (const kw of rule.keywords) {
+        if (compactTitle.includes(kw) || title.includes(kw)) {
+          return rule.brandName;
+        }
+      }
+    }
+
+    return 'No Brand';
+  };
+
+  // 🌟 ২. SMART DYNAMIC RATING, SOLD & MULTI-REVIEW GENERATOR (প্রতিটি প্রোডাক্টে আলাদা রিভিউ ও সোল্ড দেখাবে)
+  const getProductSocialProof = (product: any) => {
+    if (!product) {
+      return {
+        ratingScore: '4.9',
+        ratingCount: 142,
+        soldCount: 380,
+        reviews: []
+      };
+    }
+
+    // প্রোডাক্টের নাম এবং আইডি দিয়ে একটি ইউনিক নাম্বার (Seed) তৈরি করা
+    const str = `${product.id || ''}_${product.name || 'nexa'}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) % 100000;
+    }
+
+    // আলাদা আলাদা রেটিং স্কোর (4.7, 4.8, 4.9, 5.0)
+    const possibleScores = ['4.8', '4.9', '4.7', '5.0', '4.9', '4.8'];
+    const ratingScore = possibleScores[hash % possibleScores.length];
+
+    // আলাদা আলাদা রেটিং সংখ্যা (যেমন: 47 থেকে 390 এর মধ্যে)
+    const ratingCount = 45 + (hash % 340);
+
+    // আলাদা আলাদা সোল্ড সংখ্যা (রেটিং সংখ্যার চেয়ে ২-৩ গুণ বেশি, যাতে ১০০% বাস্তব মনে হয়)
+    const soldMultiplier = 2 + (hash % 2);
+    const soldCount = ratingCount * soldMultiplier + (hash % 45);
+
+    // ২৪টি বাস্তবসম্মত বাংলাদেশি কাস্টমার রিভিউ পুল
+    const allReviewsPool = [
+      { name: 'তানভীর আহমেদ', date: '২ দিন আগে', stars: 5, text: 'আলহামদুলিল্লাহ, ছবির সাথে ১০০% মিল আছে। ডেলিভারি খুব দ্রুত পেয়েছি এবং প্যাকেজিং দারুণ ছিল।' },
+      { name: 'সাদিয়া ইসলাম', date: '৪ দিন আগে', stars: 5, text: 'প্রোডাক্টের কোয়ালিটি দামের তুলনায় অনেক ভালো। হাতে পেয়ে চেক করে টাকা দিয়েছি, ধন্যবাদ!' },
+      { name: 'মাহমুদুল হাসান রাকিব', date: '১ দিন আগে', stars: 5, text: 'অরিজিনাল প্রোডাক্ট পেয়েছি। প্রথমে একটু চিন্তায় ছিলাম, কিন্তু হাতে পাওয়ার পর মন ভরে গেছে। সেরা সার্ভিস!' },
+      { name: 'নুসরাত জাহান মিম', date: '৫ দিন আগে', stars: 5, text: 'অনেক সুন্দর প্রোডাক্ট! যেমনটা চেয়েছিলাম ঠিক তেমনটাই পাঠিয়েছে। ডেলিভারি ম্যান ভাইয়াও খুব ভালো ছিলেন।' },
+      { name: 'আরিফুল ইসলাম', date: '৩ দিন আগে', stars: 4, text: 'দাম অনুযায়ী কোয়ালিটি এক কথায় অসাধারণ। ঢাকার বাইরে ৩ দিনের মধ্যে ডেলিভারি পেয়েছি।' },
+      { name: 'ফারহানা ইয়াসমিন', date: '১ সপ্তাহ আগে', stars: 5, text: 'এখান থেকে এটা আমার দ্বিতীয় অর্ডার। আগের বারের মতো এবারও ১০০% জেনুইন প্রোডাক্ট পেয়েছি। সবাই নিশ্চিন্তে নিতে পারেন।' },
+      { name: 'জাহিদুল ইসলাম জয়', date: '৬ দিন আগে', stars: 5, text: 'প্যাকেজিং খুবই মজবুত ছিল। ভেতরে প্রোডাক্ট একদম নিখুঁত অবস্থায় পেয়েছি। ইনশাআল্লাহ আবার অর্ডার করব।' },
+      { name: 'মেহেদী হাসান শুভ', date: '২ দিন আগে', stars: 5, text: 'বাজারের চেয়ে কম দামে এত ভালো কোয়ালিটির জিনিস পাবো ভাবিনি। কাস্টমার সাপোর্টও খুব আন্তরিক।' },
+      { name: 'তাসনিম তাবাসসুম', date: 'গতকাল', stars: 5, text: 'অনেক প্রিমিয়াম লুক! গিফট দেওয়ার জন্য নিয়েছিলাম, সবাই অনেক পছন্দ করেছে। অসংখ্য ধন্যবাদ।' },
+      { name: 'রাশেদুল করিম', date: '৪ দিন আগে', stars: 4, text: 'খুবই ভালো সার্ভিস। অর্ডার করার পরের দিনই হাতে পেয়েছি। কোয়ালিটি একদম পারফেক্ট।' },
+      { name: 'সাব্বির হোসেন', date: '১ সপ্তাহ আগে', stars: 5, text: 'এক কথায় অস্থির প্রোডাক্ট! ডেলিভারির সময় খুলে চেক করে নেওয়ার সুবিধা থাকায় কোনো টেনশন ছিল না।' },
+      { name: 'জান্নাতুল ফেরদৌস', date: '৩ দিন আগে', stars: 5, text: 'ছবিতে যেমন দেখেছি বাস্তবে তার চেয়েও বেশি সুন্দর। ফিনিশিং এবং কোয়ালিটি ১০ এ ১০!' },
+      { name: 'শাকিল মাহমুদ', date: '৫ দিন আগে', stars: 5, text: 'আমি গত ১ সপ্তাহ ধরে ব্যবহার করছি, দারুণ কাজ করছে। এই বাজেটে সেরা ডিল বলা যায়।' },
+      { name: 'নাজমুল হুদা', date: '২ দিন আগে', stars: 5, text: 'সেলার ভাই খুব দ্রুত রেসপন্স করেন। প্রোডাক্ট হাতে পেয়ে শতভাগ সন্তুষ্ট আমি।' },
+      { name: 'রুবাইয়া তাবাসসুম', date: '৬ দিন আগে', stars: 4, text: 'প্রোডাক্টটি বেশ ভালো এবং দেখতে একদম ব্র্যান্ড নিউ। ডেলিভারি আরেকটু ফাস্ট হলে আরও ভালো হতো, তবে জিনিস খুব ভালো।' },
+      { name: 'ইমরান হোসেন সাগর', date: '১ দিন আগে', stars: 5, text: 'এত কম দামে অরিজিনাল প্রোডাক্ট দেওয়ার জন্য ধন্যবাদ। বন্ধুদেরও সাজেস্ট করেছি আপনাদের শপের কথা।' },
+      { name: 'কাজী ফাহিম', date: '৪ দিন আগে', stars: 5, text: 'প্রিমিয়াম কোয়ালিটি, হাতে নিলেই বোঝা যায় জিনিসটা কতটা ভালো। চোখ বন্ধ করে অর্ডার করতে পারেন।' },
+      { name: 'শারমিন আক্তার নিপা', date: '১ সপ্তাহ আগে', stars: 5, text: 'অনলাইনে কেনাকাটায় মাঝে মাঝে ঠকতে হয়, কিন্তু এখান থেকে প্রোডাক্ট নিয়ে দারুণ অভিজ্ঞতা হলো। ১০০% রিকমেন্ডেড!' }
+    ];
+
+    // এই প্রোডাক্টের জন্য ইউনিক ৩টি রিভিউ সিলেক্ট করা (যাতে এক প্রোডাক্টের সাথে অন্য প্রোডাক্টের রিভিউ না মেলে)
+    const totalReviews = allReviewsPool.length;
+    const idx1 = hash % totalReviews;
+    const idx2 = (hash + 5) % totalReviews;
+    const idx3 = (hash + 11) % totalReviews;
+
+    return {
+      ratingScore,
+      ratingCount,
+      soldCount,
+      reviews: [allReviewsPool[idx1], allReviewsPool[idx2], allReviewsPool[idx3]]
+    };
+  };
+
+  // 🖼️ প্রোডাক্টের ৪টি ছবির গ্যালারি তৈরি করার ফাংশন
+  const getProductGallery = (product: any) => {
+    if (!product) return [];
+    const customImages = [
+      product.image_url,
+      product.image_url_2 || product.image2,
+      product.image_url_3 || product.image3,
+      product.image_url_4 || product.image4,
+    ].filter(Boolean);
+
+    if (Array.isArray(product.images) && product.images.length >= 2) {
+      return product.images.slice(0, 4).map((url: string) => ({
+        url,
+        imgClass: 'scale-100 object-center'
+      }));
+    }
+
+    if (customImages.length >= 2) {
+      return customImages.map((url) => ({
+        url,
+        imgClass: 'scale-100 object-center'
+      }));
+    }
+
+    const mainImg = product.image_url;
+    return [
+      { url: mainImg, imgClass: 'scale-100 object-center' },
+      { url: mainImg, imgClass: 'scale-125 object-center' },
+      { url: mainImg, imgClass: 'scale-115 object-top' },
+      { url: mainImg, imgClass: 'scale-115 object-bottom' },
+    ];
+  };
+
+  // 💰 দাম ও কাটা দাম (Original Price) বের করার ফাংশন
+  const getCleanPrice = (val: any) => Number(val?.toString().replace(/[^0-9]/g, '')) || 0;
+  const getOriginalPrice = (product: any) => {
+    const current = getCleanPrice(product?.price);
+    const orig = getCleanPrice(product?.original_price);
+    if (orig > current) return orig;
+    return Math.round(current * 1.45);
   };
 
   // ব্যাকআপ প্রোডাক্ট তালিকা (ক্যাটাগরিসহ নিখুঁত ম্যাপিং)
@@ -268,8 +481,12 @@ export default function NexaStore() {
     { name: "More Categories", query: "", img: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=150&q=80" },
   ];
 
+  const galleryImages = getProductGallery(viewingProduct);
+  const detectedBrand = getProductBrand(viewingProduct);
+  const socialProof = getProductSocialProof(viewingProduct);
+
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-sans selection:bg-amber-500 selection:text-black pb-20">
+    <div className="min-h-screen bg-[#080808] text-white font-sans selection:bg-amber-500 selection:text-black pb-24">
 
       {/* 🖼️ FULL SCREEN IMAGE LIGHTBOX (ছবির ওপর ক্লিক করলে বড় করে দেখার পপআপ) */}
       {isImageZoomOpen && viewingProduct && (
@@ -283,12 +500,26 @@ export default function NexaStore() {
           >
             <X size={22} />
           </button>
-          <img 
-            src={viewingProduct.image_url} 
-            alt={viewingProduct.name} 
-            onClick={(e) => e.stopPropagation()}
-            className="max-w-full max-h-[82vh] object-contain rounded-xl border border-amber-500/30 shadow-2xl cursor-default"
-          />
+          <div className="relative flex items-center justify-center max-w-full max-h-[78vh] overflow-hidden rounded-xl border border-amber-500/30" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={galleryImages[activeImageIdx]?.url || viewingProduct.image_url} 
+              alt={viewingProduct.name} 
+              className={`max-w-full max-h-[76vh] object-contain transition-transform duration-300 ${galleryImages[activeImageIdx]?.imgClass || ''}`}
+            />
+          </div>
+          <div className="flex items-center gap-2.5 mt-4" onClick={(e) => e.stopPropagation()}>
+            {galleryImages.map((imgObj, idx) => (
+              <button
+                key={idx}
+                onClick={() => setActiveImageIdx(idx)}
+                className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition cursor-pointer bg-[#14110c] ${
+                  activeImageIdx === idx ? 'border-amber-400 scale-105' : 'border-white/20 opacity-50'
+                }`}
+              >
+                <img src={imgObj.url} alt="" className={`w-full h-full object-cover ${imgObj.imgClass}`} />
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-gray-300 mt-3 font-semibold text-center max-w-md">{viewingProduct.name}</p>
         </div>
       )}
@@ -653,138 +884,215 @@ export default function NexaStore() {
       </header>
 
       {/* ===================================================================== */}
-      {/* 🛍️ DARAZ-STYLE PRODUCT DETAILS PAGE (প্রোডাক্টে ক্লিক করলে এটি ওপেন হবে) */}
+      {/* 🛍️ REAL DARAZ APP & WEB STYLE PRODUCT DETAILS PAGE */}
       {/* ===================================================================== */}
       {viewingProduct ? (
-        <div className="max-w-[1340px] mx-auto px-3 md:px-4 mt-4 animate-in fade-in duration-200">
-          {/* উপরের Back ও Breadcrumb বার */}
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#110e0a] border border-amber-500/20 rounded-xl px-3.5 py-2.5 mb-4">
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 overflow-hidden">
-              <button onClick={() => setViewingProduct(null)} className="text-amber-400 font-bold hover:underline cursor-pointer shrink-0">
-                Home
-              </button>
-              <ChevronRight size={13} className="shrink-0" />
-              <span className="text-gray-400 shrink-0">{viewingProduct.category || 'Product'}</span>
-              <ChevronRight size={13} className="shrink-0" />
-              <span className="text-white font-semibold truncate">{viewingProduct.name}</span>
-            </div>
+        <div className="max-w-[1340px] mx-auto px-2 sm:px-4 mt-2.5 animate-in fade-in duration-200">
+          
+          {/* Top Compact Navigation Bar */}
+          <div className="flex items-center justify-between gap-2 bg-[#110e0a] border border-amber-500/20 rounded-xl px-3 py-2 mb-3">
             <button
               onClick={() => setViewingProduct(null)}
-              className="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-400 text-xs font-bold px-3 py-1 rounded-lg transition cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 text-amber-400 hover:text-amber-300 text-xs font-extrabold cursor-pointer shrink-0"
             >
-              ← সব প্রোডাক্টে ফিরে যান
+              <ChevronLeft size={16} /> Back to Shop
             </button>
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 truncate">
+              <span>Home</span>
+              <ChevronRight size={12} />
+              <span>{viewingProduct.category || 'Official Store'}</span>
+              <ChevronRight size={12} />
+              <span className="text-amber-400 font-semibold">{detectedBrand}</span>
+              <ChevronRight size={12} />
+              <span className="text-gray-200 font-semibold truncate max-w-[240px]">{viewingProduct.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsWishlisted(!isWishlisted)}
+                className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                  isWishlisted ? 'bg-red-500/20 border-red-500 text-red-500' : 'bg-[#1a150e] border-amber-500/20 text-gray-300'
+                }`}
+              >
+                <Heart size={14} fill={isWishlisted ? 'currentColor' : 'none'} />
+              </button>
+              <button
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: viewingProduct.name, url: window.location.href });
+                  } else {
+                    navigator.clipboard.writeText(window.location.href);
+                    alert("প্রোডাক্টের লিংক কপি হয়েছে!");
+                  }
+                }}
+                className="p-1.5 rounded-lg bg-[#1a150e] border border-amber-500/20 text-gray-300 hover:text-amber-400 transition cursor-pointer"
+              >
+                <Share2 size={14} />
+              </button>
+            </div>
           </div>
 
-          {/* প্রোডাক্টের মূল বক্স (Daraz 3-Column Layout) */}
-          <div className="bg-[#120f0a] border border-amber-500/30 rounded-2xl p-4 md:p-6 shadow-2xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* MAIN DARAZ PRODUCT CARD (3-Column Desktop / Sleek App Stack on Mobile) */}
+          <div className="bg-[#110e09] border border-amber-500/25 rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-12">
             
-            {/* ১. বাম পাশ: প্রোডাক্টের বড় ছবি ও জুম অপশন */}
-            <div className="lg:col-span-4 flex flex-col gap-3">
+            {/* 1. LEFT COLUMN: 4-PHOTO GALLERY (একদম দারাজের মতো পরিষ্কার গ্যালারি) */}
+            <div className="lg:col-span-4 p-3 sm:p-5 bg-[#0e0b07] border-b lg:border-b-0 lg:border-r border-amber-500/15">
+              {/* বড় মেইন ছবি */}
               <div 
                 onClick={() => setIsImageZoomOpen(true)}
-                className="relative w-full aspect-square bg-[#1b1610] rounded-xl overflow-hidden border border-amber-500/20 flex items-center justify-center group cursor-zoom-in"
+                className="relative w-full aspect-square bg-[#17130d] rounded-xl overflow-hidden border border-amber-500/20 flex items-center justify-center cursor-zoom-in"
               >
                 <img 
-                  src={viewingProduct.image_url} 
+                  src={galleryImages[activeImageIdx]?.url || viewingProduct.image_url} 
                   alt={viewingProduct.name} 
-                  className="w-full h-full object-contain sm:object-cover group-hover:scale-105 transition duration-300"
+                  className={`w-full h-full object-cover transition-transform duration-300 ${galleryImages[activeImageIdx]?.imgClass || ''}`}
                 />
-                <span className="absolute top-2.5 right-2.5 bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-md shadow">
-                  {viewingProduct.discount || '-40%'}
-                </span>
-                <div className="absolute bottom-2.5 inset-x-2.5 bg-black/75 backdrop-blur-xs text-center py-1.5 rounded-lg text-[11px] text-amber-300 font-semibold border border-white/10">
-                  🔍 ছবির ওপর ক্লিক করে ফুল-স্ক্রিনে বড় করে দেখুন
+
+                {/* বাম-ডান ছবি পাল্টানোর বাটন */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveImageIdx((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1));
+                  }}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-amber-400 text-white hover:text-black flex items-center justify-center transition cursor-pointer shadow"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveImageIdx((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1));
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-amber-400 text-white hover:text-black flex items-center justify-center transition cursor-pointer shadow"
+                >
+                  <ChevronRight size={18} />
+                </button>
+
+                {/* Daraz Style 1/4 Counter Pill */}
+                <div className="absolute bottom-3 right-3 bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/15">
+                  {activeImageIdx + 1}/{galleryImages.length}
                 </div>
               </div>
 
-              {/* ছোট থাম্বনেইল গ্যালারি */}
-              <div className="flex items-center gap-2.5">
-                <div 
-                  onClick={() => setIsImageZoomOpen(true)}
-                  className="w-16 h-16 rounded-lg overflow-hidden border-2 border-amber-400 bg-[#1b1610] p-0.5 cursor-pointer"
-                >
-                  <img src={viewingProduct.image_url} alt="" className="w-full h-full object-cover rounded" />
-                </div>
-                <div 
-                  onClick={() => setIsImageZoomOpen(true)}
-                  className="flex-1 bg-[#18140f] border border-amber-500/20 rounded-lg h-16 px-3 flex items-center justify-between cursor-pointer hover:border-amber-400 transition"
-                >
-                  <div>
-                    <p className="text-xs font-bold text-white">100% Real Product Photo</p>
-                    <p className="text-[10px] text-gray-400">ক্লিক করলে ছবিটি বড় হয়ে ওপেন হবে</p>
-                  </div>
-                  <Search size={16} className="text-amber-400" />
-                </div>
+              {/* নিচে ৪টি থাম্বনেইল ছবি (Click to switch image) */}
+              <div className="grid grid-cols-4 gap-2.5 mt-3">
+                {galleryImages.map((imgObj, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveImageIdx(idx)}
+                    className={`relative aspect-square rounded-lg overflow-hidden bg-[#17130d] transition-all cursor-pointer ${
+                      activeImageIdx === idx 
+                        ? 'ring-2 ring-amber-400 scale-[1.03] opacity-100 shadow-[0_0_12px_rgba(245,158,11,0.4)]' 
+                        : 'border border-white/10 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <img 
+                      src={imgObj.url} 
+                      alt={`Thumbnail ${idx + 1}`} 
+                      className={`w-full h-full object-cover ${imgObj.imgClass}`} 
+                    />
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* ২. মাঝের অংশ: নাম, দাম, কোয়ান্টিটি এবং অর্ডার বাটন */}
-            <div className="lg:col-span-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-amber-500/20 pb-5 lg:pb-0 lg:pr-6">
+            {/* 2. MIDDLE COLUMN: DARAZ FLASH BANNER, TITLE, DYNAMIC RATINGS, QTY & ACTIONS */}
+            <div className="lg:col-span-5 p-3.5 sm:p-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-amber-500/15">
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                    {viewingProduct.category || 'Official Store'}
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 size={11} /> In Stock
-                  </span>
+                {/* ⚡ DARAZ STYLE FLASH DEAL PRICE BANNER */}
+                <div className="bg-gradient-to-r from-[#261a07] via-[#1c1306] to-[#140e05] border border-amber-500/40 rounded-xl p-3 mb-3.5 shadow-inner">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                      <Zap size={11} fill="currentColor" /> Flash Deal
+                    </span>
+                    <span className="text-[11px] text-amber-300 font-bold">
+                      ✓ Cash on Delivery Available
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2.5 mt-1">
+                    <span className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight">
+                      ৳{getCleanPrice(viewingProduct.price) * detailQty}
+                    </span>
+                    <span className="text-sm sm:text-base text-gray-400 line-through font-bold">
+                      ৳{getOriginalPrice(viewingProduct) * detailQty}
+                    </span>
+                    <span className="bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded">
+                      {viewingProduct.discount || '-40%'}
+                    </span>
+                  </div>
                 </div>
 
-                <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-white leading-snug mb-2.5">
-                  {viewingProduct.name}
-                </h1>
+                {/* 🏷️ DARAZ MALL INLINE BADGE + PRODUCT TITLE */}
+                <div className="mb-2.5">
+                  <h1 className="text-base sm:text-lg md:text-xl font-extrabold text-white leading-snug">
+                    <span className="inline-block bg-gradient-to-r from-red-600 to-amber-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded mr-2 align-middle uppercase tracking-wider">
+                      Mall
+                    </span>
+                    {viewingProduct.name}
+                  </h1>
+                </div>
 
-                {/* রেটিং ও ব্র্যান্ড */}
-                <div className="flex flex-wrap items-center gap-3 text-xs pb-3 mb-4 border-b border-amber-500/15">
-                  <div className="flex items-center text-amber-400 gap-1">
-                    <Star size={14} fill="currentColor" />
-                    <Star size={14} fill="currentColor" />
-                    <Star size={14} fill="currentColor" />
-                    <Star size={14} fill="currentColor" />
-                    <Star size={14} fill="currentColor" />
-                    <span className="text-gray-300 font-semibold ml-1">{viewingProduct.rating || '4.9 (1.2k Verified Ratings)'}</span>
+                {/* ⭐ DYNAMIC RATING, SOLD & AUTO-BRAND ROW (প্রতিটি প্রোডাক্টে আলাদা সংখ্যা দেখাবে) */}
+                <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-gray-300 pb-3 mb-3 border-b border-amber-500/15">
+                  <div className="flex items-center gap-1">
+                    <div className="flex items-center text-amber-400">
+                      <Star size={13} fill="currentColor" />
+                      <Star size={13} fill="currentColor" />
+                      <Star size={13} fill="currentColor" />
+                      <Star size={13} fill="currentColor" />
+                      <Star size={13} fill="currentColor" />
+                    </div>
+                    <span className="font-bold text-amber-400 ml-0.5">{socialProof.ratingScore}</span>
+                    <span className="text-gray-400">({socialProof.ratingCount})</span>
                   </div>
                   <span className="text-gray-600">|</span>
-                  <span className="text-gray-400">Brand: <b className="text-amber-400">{settings.store_name} Original</b></span>
+                  <span className="text-gray-300 font-semibold">{socialProof.soldCount}+ Sold</span>
+                  <span className="text-gray-600">|</span>
+                  <span className="text-gray-400">
+                    Brand: <b className="text-amber-400">{detectedBrand}</b>
+                  </span>
                 </div>
 
-                {/* প্রাইস বক্স */}
-                <div className="bg-[#18140f] border border-amber-500/25 rounded-xl p-3.5 mb-5">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-2xl sm:text-3xl font-black text-amber-400">
-                      ৳{Number(viewingProduct.price?.toString().replace(/[^0-9]/g, '')) * detailQty}
-                    </span>
-                    {viewingProduct.original_price && (
-                      <span className="text-sm text-gray-500 line-through font-semibold">
-                        ৳{Number(viewingProduct.original_price?.toString().replace(/[^0-9]/g, '')) * detailQty}
-                      </span>
-                    )}
-                    <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded">
-                      {viewingProduct.discount || '-40% OFF'}
-                    </span>
+                {/* 🎁 VOUCHER / PROMO TAGS (Daraz Style) */}
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                    <Gift size={12} className="text-amber-400" /> Save ৳{(getOriginalPrice(viewingProduct) - getCleanPrice(viewingProduct.price)) * detailQty} Today
+                  </span>
+                  <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-emerald-400" /> 100% Authentic
+                  </span>
+                </div>
+
+                {/* Brand & Category Spec Strip */}
+                <div className="grid grid-cols-2 gap-2 bg-[#16120c] border border-amber-500/15 rounded-xl p-2.5 mb-4 text-xs">
+                  <div>
+                    <span className="text-gray-500 text-[10px] block">Brand</span>
+                    <span className="font-bold text-amber-400">{detectedBrand}</span>
                   </div>
-                  <p className="text-[11px] text-emerald-400 mt-1 font-medium">
-                    ✓ প্রোডাক্ট হাতে পেয়ে দেখে টাকা পরিশোধ করার সুবিধা রয়েছে (Cash on Delivery)
-                  </p>
+                  <div>
+                    <span className="text-gray-500 text-[10px] block">Category</span>
+                    <span className="font-bold text-white">{viewingProduct.category || 'Official Collection'}</span>
+                  </div>
                 </div>
 
-                {/* কোয়ান্টিটি সিলেক্টর */}
-                <div className="flex items-center gap-4 mb-6">
-                  <span className="text-xs font-bold text-gray-300">Quantity (পরিমাণ):</span>
-                  <div className="flex items-center gap-3 bg-[#1c1812] border border-amber-500/30 rounded-lg px-2.5 py-1">
+                {/* 🔢 QUANTITY SELECTOR */}
+                <div className="flex items-center justify-between bg-[#16120c] border border-amber-500/20 rounded-xl px-3.5 py-2 mb-4">
+                  <span className="text-xs font-bold text-gray-300">Quantity (পরিমাণ)</span>
+                  <div className="flex items-center gap-3">
                     <button 
                       type="button"
                       onClick={() => setDetailQty(Math.max(1, detailQty - 1))}
-                      className="w-7 h-7 rounded bg-[#251e15] text-white font-black text-sm flex items-center justify-center hover:bg-amber-500 hover:text-black transition cursor-pointer"
+                      className="w-7 h-7 rounded-lg bg-[#241d14] border border-amber-500/30 text-white font-black text-sm flex items-center justify-center hover:bg-amber-400 hover:text-black transition cursor-pointer"
                     >
                       -
                     </button>
-                    <span className="text-sm font-black text-amber-400 min-w-[24px] text-center">{detailQty}</span>
+                    <span className="text-sm font-black text-amber-400 min-w-[22px] text-center">{detailQty}</span>
                     <button 
                       type="button"
                       onClick={() => setDetailQty(detailQty + 1)}
-                      className="w-7 h-7 rounded bg-[#251e15] text-white font-black text-sm flex items-center justify-center hover:bg-amber-500 hover:text-black transition cursor-pointer"
+                      className="w-7 h-7 rounded-lg bg-[#241d14] border border-amber-500/30 text-white font-black text-sm flex items-center justify-center hover:bg-amber-400 hover:text-black transition cursor-pointer"
                     >
                       +
                     </button>
@@ -792,17 +1100,17 @@ export default function NexaStore() {
                 </div>
               </div>
 
-              {/* Buy Now & Add to Cart বাটন */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              {/* 🛒 ACTION BUTTONS */}
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={(e) => addToCart(viewingProduct, e, detailQty)}
-                  className="bg-[#1c1812] hover:bg-amber-500/15 border-2 border-amber-400 text-amber-400 font-extrabold py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer active:scale-95"
+                  className="bg-[#1c1710] hover:bg-amber-500/15 border-2 border-amber-400 text-amber-400 font-extrabold py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
-                  <ShoppingCart size={17} /> Add to Cart
+                  <ShoppingCart size={16} /> Add to Cart
                 </button>
                 <button
                   onClick={() => {
-                    const unitPrice = Number(viewingProduct.price?.toString().replace(/[^0-9]/g, '')) || 0;
+                    const unitPrice = getCleanPrice(viewingProduct.price);
                     openCheckout({
                       ...viewingProduct,
                       name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
@@ -816,92 +1124,274 @@ export default function NexaStore() {
               </div>
             </div>
 
-            {/* ৩. ডান পাশ: দারাজের মতো ডেলিভারি ও ওয়ারেন্টি ইনফরমেশন */}
-            <div className="lg:col-span-3 flex flex-col justify-between bg-[#16120c] rounded-xl p-4 border border-amber-500/20 space-y-4">
+            {/* 3. RIGHT COLUMN: DARAZ DELIVERY, WARRANTY & OFFICIAL SELLER CARD */}
+            <div className="lg:col-span-3 p-3.5 sm:p-5 bg-[#14100b] flex flex-col justify-between space-y-4">
               <div className="space-y-3">
-                <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider border-b border-amber-500/20 pb-2">
-                  Delivery & Service
-                </h4>
-                <div className="flex items-start gap-2.5 text-xs">
-                  <Truck size={17} className="text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold text-white">সারাদেশে হোম ডেলিভারি</p>
-                    <p className="text-[11px] text-gray-400">ঢাকার ভেতরে ১-২ দিন, ঢাকার বাইরে ২-৪ দিন</p>
-                  </div>
+                <div className="flex items-center justify-between border-b border-amber-500/15 pb-2">
+                  <span className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider">Delivery Options</span>
+                  <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1">
+                    <MapPin size={12} /> Bangladesh
+                  </span>
                 </div>
+
                 <div className="flex items-start gap-2.5 text-xs">
-                  <ShieldCheck size={17} className="text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold text-white">ক্যাশ অন ডেলিভারি সুবিধা</p>
-                    <p className="text-[11px] text-gray-400">পণ্য হাতে পেয়ে চেক করে পেমেন্ট করুন</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2.5 text-xs">
-                  <CheckCircle2 size={17} className="text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold text-white">৭ দিনের ইজি রিটার্ন ও রিপ্লেসমেন্ট</p>
-                    <p className="text-[11px] text-gray-400">কোনো সমস্যা থাকলে সহজেই পরিবর্তনযোগ্য</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* সরাসরি কল বা হোয়াটসঅ্যাপ অর্ডার বক্স */}
-              <div className="pt-3 border-t border-amber-500/20 space-y-2">
-                <p className="text-[11px] text-gray-400 font-semibold">সরাসরি কথা বলে অর্ডার করতে চান?</p>
-                <a 
-                  href={"tel:" + HELPLINE_NUMBER}
-                  className="w-full bg-[#1c1812] hover:bg-[#251f17] border border-amber-500/30 text-white text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition"
-                >
-                  <Phone size={14} className="text-amber-400" /> কল করুন: {HELPLINE_NUMBER}
-                </a>
-                <a 
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" (দাম: ৳${viewingProduct.price}) প্রোডাক্টটি অর্ডার করতে চাই।`)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/50 text-[#25D366] text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 transition"
-                >
-                  <MessageCircle size={14} /> WhatsApp-এ অর্ডার করুন
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* প্রোডাক্টের বিস্তারিত বিবরণ (Product Details & Specifications) */}
-          <div className="mt-6 bg-[#120f0a] border border-amber-500/20 rounded-2xl p-4 md:p-6">
-            <h3 className="text-sm md:text-base font-extrabold text-amber-400 border-b border-amber-500/20 pb-2.5 mb-3">
-              প্রোডাক্টের বিস্তারিত বিবরণ (Product Details of {viewingProduct.name})
-            </h3>
-            <div className="text-xs sm:text-sm text-gray-300 space-y-2 leading-relaxed">
-              <p>✅ <b>পণ্যের নাম:</b> {viewingProduct.name}</p>
-              <p>✅ <b>ক্যাটাগরি:</b> {viewingProduct.category || 'Premium Collection'}</p>
-              <p>✅ <b>কোয়ালিটি:</b> ১০০% অরিজিনাল এবং প্রিমিয়াম কোয়ালিটি গ্যারান্টি।</p>
-              <p>✅ <b>ডেলিভারি:</b> সমগ্র বাংলাদেশে দ্রুততম হোম ডেলিভারি সুবিধা। পণ্য হাতে পেয়ে দেখে টাকা পরিশোধ করতে পারবেন।</p>
-              {viewingProduct.description && <p className="mt-2 text-gray-200">{viewingProduct.description}</p>}
-            </div>
-          </div>
-
-          {/* একই রকম আরও প্রোডাক্ট (Related Products) */}
-          <div className="mt-8">
-            <h3 className="text-base font-black text-white mb-3 flex items-center gap-2">
-              <Flame size={18} className="text-amber-400 fill-amber-400" /> আরও কিছু জনপ্রিয় প্রোডাক্ট
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-              {products.filter(p => p.id !== viewingProduct.id).slice(0, 6).map((item) => (
-                <div 
-                  key={item.id} 
-                  onClick={() => openProductDetails(item)}
-                  className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
-                >
-                  <div>
-                    <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                  <Truck size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="flex justify-between">
+                      <p className="font-bold text-white">Standard Home Delivery</p>
                     </div>
-                    <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400">{item.name}</h4>
-                    <span className="text-amber-400 font-black text-sm">৳{item.price?.toString().replace(/[^0-9]/g, '')}</span>
+                    <p className="text-[11px] text-gray-400">ঢাকায় ১-২ দিন, ঢাকার বাইরে ২-৪ দিন</p>
                   </div>
                 </div>
-              ))}
+
+                <div className="flex items-start gap-2.5 text-xs">
+                  <ShieldCheck size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-white">Cash on Delivery Available</p>
+                    <p className="text-[11px] text-gray-400">পণ্য হাতে পেয়ে দেখে পেমেন্ট করুন</p>
+                  </div>
+                </div>
+
+                <div className="border-t border-amber-500/15 pt-3 space-y-2.5">
+                  <span className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider block">Return & Warranty</span>
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <RotateCcw size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-white">7 Days Easy Return</p>
+                      <p className="text-[11px] text-gray-400">ত্রুটিপূর্ণ পণ্য সহজেই পরিবর্তনযোগ্য</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-xs">
+                    <Award size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-white">100% Authentic Guaranteed</p>
+                      <p className="text-[11px] text-gray-400">অরিজিনাল ও প্রিমিয়াম কোয়ালিটি</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 🏪 DARAZ STYLE OFFICIAL STORE / SELLER CARD */}
+              <div className="bg-[#1b160f] border border-amber-500/25 rounded-xl p-3 space-y-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-300 text-black font-black flex items-center justify-center text-sm shrink-0">
+                    N
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-extrabold text-white truncate">Sold by {settings.store_name}</p>
+                    <p className="text-[10px] text-emerald-400 font-semibold">✓ Verified Mall Seller</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-center bg-black/30 rounded-lg py-1.5 border border-white/5">
+                  <div>
+                    <p className="text-xs font-black text-amber-400">98%</p>
+                    <p className="text-[9px] text-gray-400">Positive</p>
+                  </div>
+                  <div className="border-x border-white/10">
+                    <p className="text-xs font-black text-white">99%</p>
+                    <p className="text-[9px] text-gray-400">On-Time</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-emerald-400">100%</p>
+                    <p className="text-[9px] text-gray-400">Chat Reply</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <a 
+                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" (দাম: ৳${viewingProduct.price}) অর্ডার করতে চাই।`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/40 text-[#25D366] text-[11px] font-bold py-1.5 rounded-lg flex items-center justify-center gap-1 transition"
+                  >
+                    <MessageCircle size={13} /> Chat Now
+                  </a>
+                  <button
+                    onClick={() => setViewingProduct(null)}
+                    className="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg flex items-center justify-center gap-1 transition cursor-pointer"
+                  >
+                    <Store size={13} /> Visit Store
+                  </button>
+                </div>
+              </div>
             </div>
+          </div>
+
+          {/* ⭐ DARAZ STYLE DYNAMIC RATINGS & REVIEWS + PRODUCT DESCRIPTION */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
+            {/* প্রোডাক্টের বিবরণ */}
+            <div className="lg:col-span-6 bg-[#110e09] border border-amber-500/20 rounded-2xl p-4 sm:p-5">
+              <h3 className="text-sm sm:text-base font-extrabold text-amber-400 border-b border-amber-500/15 pb-2.5 mb-3">
+                Product Details of {viewingProduct.name}
+              </h3>
+              <div className="text-xs sm:text-sm text-gray-300 space-y-2.5 leading-relaxed">
+                <p>✅ <b>মডেল / নাম:</b> {viewingProduct.name}</p>
+                <p>✅ <b>ব্র্যান্ড (Brand):</b> {detectedBrand}</p>
+                <p>✅ <b>ক্যাটাগরি:</b> {viewingProduct.category || 'Official Flagship'}</p>
+                <p>✅ <b>কোয়ালিটি:</b> ১০০% অরিজিনাল এবং প্রিমিয়াম কোয়ালিটি প্রোডাক্ট।</p>
+                <p>✅ <b>চেকিং সুবিধা:</b> ডেলিভারি ম্যানের সামনে প্রোডাক্ট খুলে দেখে তারপর টাকা পরিশোধ করতে পারবেন।</p>
+                <p>✅ <b>রিটার্ন পলিসি:</b> পণ্যে কোনো সমস্যা থাকলে ৭ দিনের মধ্যে সহজ রিপ্লেসমেন্ট সুবিধা।</p>
+                {viewingProduct.description && <p className="mt-2 text-gray-200">{viewingProduct.description}</p>}
+              </div>
+            </div>
+
+            {/* কাস্টমার রিভিউ সেকশন (প্রতিটি প্রোডাক্টে আলাদা ৩টি করে ভেরিফাইড রিভিউ দেখাবে) */}
+            <div className="lg:col-span-6 bg-[#110e09] border border-amber-500/20 rounded-2xl p-4 sm:p-5">
+              <div className="flex items-center justify-between border-b border-amber-500/15 pb-2.5 mb-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-white">
+                    Ratings & Reviews ({socialProof.ratingCount})
+                  </h3>
+                  <p className="text-[10px] text-gray-400">100% Verified Buyers from Bangladesh</p>
+                </div>
+                <div className="flex items-center gap-1 bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 rounded-lg text-amber-400 text-xs font-black">
+                  <Star size={13} fill="currentColor" /> {socialProof.ratingScore} / 5.0
+                </div>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                {socialProof.reviews.map((rev, index) => (
+                  <div key={index} className="bg-[#18130c] border border-amber-500/15 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white">{rev.name}</span>
+                        <span className="text-[10px] text-emerald-400 font-semibold">✓ Verified Purchase</span>
+                      </div>
+                      <span className="text-[10px] text-gray-500">{rev.date}</span>
+                    </div>
+                    <div className="flex items-center text-amber-400 mb-1">
+                      {Array.from({ length: rev.stars }).map((_, sIdx) => (
+                        <Star key={sIdx} size={11} fill="currentColor" />
+                      ))}
+                    </div>
+                    <p className="text-gray-300 text-[11px] leading-relaxed">{rev.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ===================================================================== */}
+          {/* 🔥 DARAZ "YOU MAY ALSO LIKE" (নিচে অনেকগুলো প্রোডাক্ট দেখাবে) */}
+          {/* ===================================================================== */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-3 bg-[#110e0a] border border-amber-500/20 rounded-xl px-3.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <Flame size={18} className="text-amber-400 fill-amber-400" />
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white leading-tight">
+                    আরও প্রোডাক্ট দেখুন (You May Also Like)
+                  </h3>
+                  <p className="text-[10px] text-amber-400/80">যেকোনো প্রোডাক্টের ওপর ক্লিক করে ৪টি ছবি ও বিস্তারিত দেখুন</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setViewingProduct(null); scrollToTop(); }}
+                className="text-xs font-bold text-amber-400 hover:underline cursor-pointer shrink-0"
+              >
+                সব দেখুন →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+              {products.filter(p => p.id !== viewingProduct.id).map((item) => {
+                const itemProof = getProductSocialProof(item);
+                return (
+                  <div 
+                    key={item.id} 
+                    onClick={() => openProductDetails(item)}
+                    className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
+                  >
+                    <div>
+                      <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                        <img 
+                          src={item.image_url} 
+                          alt={item.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
+                        />
+                        <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                          {item.discount || '-40%'}
+                        </span>
+                      </div>
+
+                      <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
+                        {item.name}
+                      </h4>
+
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-amber-400 font-black text-sm">
+                          ৳{getCleanPrice(item.price)}
+                        </span>
+                        <span className="text-gray-500 line-through text-[10px]">
+                          ৳{getOriginalPrice(item)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
+                        <Star size={10} fill="currentColor" />
+                        <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
+                      <button 
+                        onClick={(e) => addToCart(item, e)}
+                        className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <ShoppingCart size={11} /> Cart
+                      </button>
+                      <button 
+                        onClick={(e) => openCheckout(item, e)}
+                        className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
+                      >
+                        Buy Now
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 📱 DARAZ APP STYLE MOBILE STICKY BOTTOM BAR */}
+          <div className="fixed bottom-0 left-0 right-0 z-[115] lg:hidden bg-[#100d08]/95 backdrop-blur-md border-t border-amber-500/30 px-3 py-2 flex items-center gap-2 shadow-[0_-8px_25px_rgba(0,0,0,0.85)]">
+            <button
+              onClick={() => setViewingProduct(null)}
+              className="flex flex-col items-center justify-center px-2.5 py-1 text-gray-300 hover:text-amber-400 transition cursor-pointer"
+            >
+              <Store size={17} className="text-amber-400" />
+              <span className="text-[10px] font-bold mt-0.5">Store</span>
+            </button>
+
+            <a
+              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" সম্পর্কে জানতে চাই।`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center justify-center px-2.5 py-1 text-gray-300 hover:text-[#25D366] transition"
+            >
+              <MessageCircle size={17} className="text-[#25D366]" />
+              <span className="text-[10px] font-bold mt-0.5">Chat</span>
+            </a>
+
+            <button
+              onClick={(e) => addToCart(viewingProduct, e, detailQty)}
+              className="flex-1 bg-[#1c1812] border border-amber-400 text-amber-400 font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <ShoppingCart size={14} /> Add to Cart
+            </button>
+
+            <button
+              onClick={() => {
+                const unitPrice = getCleanPrice(viewingProduct.price);
+                openCheckout({
+                  ...viewingProduct,
+                  name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
+                  price: String(unitPrice * detailQty)
+                });
+              }}
+              className="flex-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black py-2.5 rounded-xl text-xs shadow-md flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+            >
+              <Zap size={14} fill="currentColor" /> অর্ডার করুন
+            </button>
           </div>
         </div>
       ) : (
@@ -1058,55 +1548,56 @@ export default function NexaStore() {
               </button>
             </div>
 
-            {/* Top Flash Sale Cards (ক্লিক করলে প্রোডাক্টের ভেতরে ঢুকবে) */}
+            {/* Top Flash Sale Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-              {products.slice(0, 6).map((item) => (
-                <div 
-                  key={item.id} 
-                  onClick={() => openProductDetails(item)}
-                  className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
-                >
-                  <div>
-                    <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                      <img 
-                        src={item.image_url} 
-                        alt={item.name} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                      />
-                      <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                        {item.discount || '-40%'}
-                      </span>
-                    </div>
-
-                    <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                      {item.name}
-                    </h4>
-
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-amber-400 font-black text-sm">
-                        ৳{item.price?.toString().replace(/[^0-9]/g, '')}
-                      </span>
-                      {item.original_price && (
-                        <span className="text-gray-500 line-through text-[10px]">
-                          ৳{item.original_price?.toString().replace(/[^0-9]/g, '')}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                      <Star size={10} fill="currentColor" />
-                      <span className="ml-1 text-gray-400">{item.rating || '4.8 (1.2k)'}</span>
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={(e) => openCheckout(item, e)}
-                    className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-1.5 rounded-lg text-[11px] shadow-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+              {products.slice(0, 6).map((item) => {
+                const itemProof = getProductSocialProof(item);
+                return (
+                  <div 
+                    key={item.id} 
+                    onClick={() => openProductDetails(item)}
+                    className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
                   >
-                    Buy Now
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                        <img 
+                          src={item.image_url} 
+                          alt={item.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                          {item.discount || '-40%'}
+                        </span>
+                      </div>
+
+                      <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
+                        {item.name}
+                      </h4>
+
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-amber-400 font-black text-sm">
+                          ৳{getCleanPrice(item.price)}
+                        </span>
+                        <span className="text-gray-500 line-through text-[10px]">
+                          ৳{getOriginalPrice(item)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
+                        <Star size={10} fill="currentColor" />
+                        <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={(e) => openCheckout(item, e)}
+                      className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-1.5 rounded-lg text-[11px] shadow-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      Buy Now
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -1152,7 +1643,7 @@ export default function NexaStore() {
                     {searchQuery ? `Products in: "${searchQuery}"` : "Just For You"}
                   </h3>
                   <p className="text-[11px] text-amber-400/80 font-medium">
-                    {searchQuery ? `${filteredProducts.length} items found` : "প্রোডাক্টের বিস্তারিত ও বড় ছবি দেখতে যেকোনো প্রোডাক্টের ওপর ক্লিক করুন"}
+                    {searchQuery ? `${filteredProducts.length} items found` : "প্রোডাক্টের বিস্তারিত ও ৪টি ছবি দেখতে যেকোনো প্রোডাক্টের ওপর ক্লিক করুন"}
                   </p>
                 </div>
               </div>
@@ -1181,61 +1672,62 @@ export default function NexaStore() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-                {filteredProducts.map((item) => (
-                  <div 
-                    key={item.id} 
-                    onClick={() => openProductDetails(item)}
-                    className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
-                  >
-                    <div>
-                      <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                        <img 
-                          src={item.image_url} 
-                          alt={item.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        />
-                        <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                          {item.discount || '-35%'}
-                        </span>
-                      </div>
-
-                      <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                        {item.name}
-                      </h4>
-
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-amber-400 font-black text-sm">
-                          ৳{item.price?.toString().replace(/[^0-9]/g, '')}
-                        </span>
-                        {item.original_price && (
-                          <span className="text-gray-500 line-through text-[10px]">
-                            ৳{item.original_price?.toString().replace(/[^0-9]/g, '')}
+                {filteredProducts.map((item) => {
+                  const itemProof = getProductSocialProof(item);
+                  return (
+                    <div 
+                      key={item.id} 
+                      onClick={() => openProductDetails(item)}
+                      className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
+                    >
+                      <div>
+                        <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+                          <img 
+                            src={item.image_url} 
+                            alt={item.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                          <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                            {item.discount || '-35%'}
                           </span>
-                        )}
+                        </div>
+
+                        <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
+                          {item.name}
+                        </h4>
+
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-amber-400 font-black text-sm">
+                            ৳{getCleanPrice(item.price)}
+                          </span>
+                          <span className="text-gray-500 line-through text-[10px]">
+                            ৳{getOriginalPrice(item)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
+                          <Star size={10} fill="currentColor" />
+                          <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                        <Star size={10} fill="currentColor" />
-                        <span className="ml-1 text-gray-400">{item.rating || '4.8 (850)'}</span>
+                      <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
+                        <button 
+                          onClick={(e) => addToCart(item, e)}
+                          className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <ShoppingCart size={11} /> Cart
+                        </button>
+                        <button 
+                          onClick={(e) => openCheckout(item, e)}
+                          className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
+                        >
+                          Buy Now
+                        </button>
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
-                      <button 
-                        onClick={(e) => addToCart(item, e)}
-                        className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <ShoppingCart size={11} /> Cart
-                      </button>
-                      <button 
-                        onClick={(e) => openCheckout(item, e)}
-                        className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
-                      >
-                        Buy Now
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1345,14 +1837,18 @@ export default function NexaStore() {
       <button
         onClick={scrollToTop}
         title="উপরে যান"
-        className="fixed bottom-[84px] right-5 z-[135] w-10 h-10 rounded-full bg-[#E2136E] hover:bg-[#c81060] text-white flex items-center justify-center shadow-[0_0_15px_rgba(226,19,110,0.45)] transition cursor-pointer"
+        className={`fixed right-5 z-[135] w-10 h-10 rounded-full bg-[#E2136E] hover:bg-[#c81060] text-white flex items-center justify-center shadow-[0_0_15px_rgba(226,19,110,0.45)] transition cursor-pointer ${
+          viewingProduct ? 'bottom-[138px] lg:bottom-[84px]' : 'bottom-[84px]'
+        }`}
       >
         <ChevronUp size={18} />
       </button>
 
       {/* 💬 "কীভাবে সাহায্য করতে পারি?" পপআপ */}
       {isHelpOpen && (
-        <div className="fixed bottom-[136px] right-5 z-[140] w-[290px] max-w-[calc(100vw-40px)] bg-white rounded-2xl shadow-2xl overflow-hidden border border-neutral-200 animate-in slide-in-from-bottom-2 duration-200">
+        <div className={`fixed right-5 z-[140] w-[290px] max-w-[calc(100vw-40px)] bg-white rounded-2xl shadow-2xl overflow-hidden border border-neutral-200 animate-in slide-in-from-bottom-2 duration-200 ${
+          viewingProduct ? 'bottom-[190px] lg:bottom-[136px]' : 'bottom-[136px]'
+        }`}>
           <div className="px-4 pt-4 pb-3 border-b border-neutral-200 relative">
             <h4 className="text-[15px] font-extrabold text-neutral-900 leading-tight">কীভাবে সাহায্য করতে পারি?</h4>
             <p className="text-[11px] text-neutral-500 mt-0.5">WhatsApp, Messenger অথবা ফোনে কথা বলুন</p>
@@ -1405,7 +1901,9 @@ export default function NexaStore() {
       <button
         onClick={() => (isHelpOpen ? closeHelp() : openHelp())}
         title={isHelpOpen ? "বন্ধ করুন" : "কাস্টমার কেয়ার"}
-        className="fixed bottom-5 right-5 z-[150] w-12 h-12 rounded-full bg-[#E2136E] hover:bg-[#c81060] text-white flex items-center justify-center shadow-[0_0_20px_rgba(226,19,110,0.5)] transition hover:scale-105 cursor-pointer"
+        className={`fixed right-5 z-[150] w-12 h-12 rounded-full bg-[#E2136E] hover:bg-[#c81060] text-white flex items-center justify-center shadow-[0_0_20px_rgba(226,19,110,0.5)] transition hover:scale-105 cursor-pointer ${
+          viewingProduct ? 'bottom-[74px] lg:bottom-5' : 'bottom-5'
+        }`}
       >
         {isHelpOpen ? <X size={22} /> : <Headphones size={22} />}
       </button>

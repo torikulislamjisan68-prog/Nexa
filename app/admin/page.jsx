@@ -69,6 +69,14 @@ function getGreeting(lang = "English") {
   }
 }
 
+// প্রোডাক্টের কতগুলো ছবি আছে তা বের করার হেল্পার ফাংশন
+function extractProductImages(imageUrl = "") {
+  if (!imageUrl) return [];
+  const [mainUrl, galleryHash] = String(imageUrl).split("#gallery=");
+  const extras = galleryHash ? galleryHash.split("|").filter(Boolean) : [];
+  return [mainUrl, ...extras].filter(Boolean);
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -102,9 +110,10 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
 
+  // 🖼️ নতুন প্রোডাক্টের জন্য ৪টি ছবির স্টেট (1 থেকে 4 টি ছবি আপলোড করা যাবে)
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
-  const [imageFile, setImageFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([null, null, null, null]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -163,20 +172,65 @@ export default function AdminDashboard() {
     setLoading(false);
   }
 
+  // 📸 ৪টি বক্সে ছবি সিলেক্ট করার ফাংশন (একসাথে একাধিক ছবি সিলেক্ট করলেও অটো বসে যাবে)
+  const handleSelectProductImages = (slotIndex, fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const filesArray = Array.from(fileList);
+
+    setImageFiles((prev) => {
+      const updated = [...prev];
+      if (filesArray.length > 1) {
+        // একসাথে ৩-৪টা ছবি সিলেক্ট করলে পরপর বক্সগুলোতে বসিয়ে দেবে
+        filesArray.slice(0, 4).forEach((file, idx) => {
+          if (slotIndex + idx < 4) {
+            updated[slotIndex + idx] = file;
+          }
+        });
+      } else {
+        updated[slotIndex] = filesArray[0];
+      }
+      return updated;
+    });
+  };
+
+  const removeSelectedImage = (slotIndex) => {
+    setImageFiles((prev) => {
+      const updated = [...prev];
+      updated[slotIndex] = null;
+      return updated;
+    });
+    const inputEl = document.getElementById(`imageUploadInput_${slotIndex}`);
+    if (inputEl) inputEl.value = "";
+  };
+
+  // 🚀 ১ থেকে ৪টি ছবি একসাথে আপলোড ও সেভ করার ফাংশন
   const handleAddProduct = async (e) => {
     e.preventDefault();
     if (!newName || !newPrice) return alert("দয়া করে নাম এবং দাম দিন!");
     setIsSubmitting(true);
 
-    let finalImageUrl = "https://via.placeholder.com/200";
-    if (imageFile) {
-      const fileExt = imageFile.name.split(".").pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from("nexa-images").upload(fileName, imageFile);
+    const selectedFiles = imageFiles.filter(Boolean);
+    const uploadedUrls = [];
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      const fileExt = file.name.split(".").pop();
+      const fileName = `prod_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from("nexa-images").upload(fileName, file);
       if (!uploadError) {
         const { data: publicUrlData } = supabase.storage.from("nexa-images").getPublicUrl(fileName);
-        finalImageUrl = publicUrlData.publicUrl;
+        if (publicUrlData?.publicUrl) {
+          uploadedUrls.push(publicUrlData.publicUrl);
+        }
       }
+    }
+
+    // ১ম ছবিটি মেইন ছবি হিসেবে থাকবে এবং বাকি ৩টি ছবি #gallery= এর ভেতর যুক্ত থাকবে (ডাটাবেস এরর ছাড়াই কাজ করবে)
+    let finalImageUrl = "https://via.placeholder.com/200";
+    if (uploadedUrls.length === 1) {
+      finalImageUrl = uploadedUrls[0];
+    } else if (uploadedUrls.length > 1) {
+      finalImageUrl = `${uploadedUrls[0]}#gallery=${uploadedUrls.slice(1).join("|")}`;
     }
 
     const { error } = await supabase.from("products").insert([
@@ -184,12 +238,17 @@ export default function AdminDashboard() {
     ]);
 
     if (!error) {
-      alert("✅ প্রোডাক্ট সফলভাবে অ্যাড হয়েছে!");
+      alert(`✅ প্রোডাক্ট সফলভাবে (${uploadedUrls.length || 1}টি ছবিসহ) অ্যাড হয়েছে!`);
       setNewName("");
       setNewPrice("");
-      setImageFile(null);
-      if (document.getElementById("imageUploadInput")) document.getElementById("imageUploadInput").value = "";
+      setImageFiles([null, null, null, null]);
+      [0, 1, 2, 3].forEach((idx) => {
+        const el = document.getElementById(`imageUploadInput_${idx}`);
+        if (el) el.value = "";
+      });
       fetchData();
+    } else {
+      alert("❌ প্রোডাক্ট সেভ করতে সমস্যা হয়েছে: " + error.message);
     }
     setIsSubmitting(false);
   };
@@ -564,26 +623,122 @@ export default function AdminDashboard() {
         {activeTab === "Products" && (
           <div className="dashboard-content" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             <section className="panel" style={{ padding: "25px" }}>
-              <PanelTitle icon={Package} title="Add New Product to Live Store" action="" />
-              <form onSubmit={handleAddProduct} style={{ display: "flex", gap: "15px", marginTop: "20px", flexWrap: "wrap", alignItems: "center" }}>
-                <div className="search-box" style={{ flex: 1, maxWidth: "100%" }}>
-                  <Package size={18} />
-                  <input type="text" placeholder="Product Name" value={newName} onChange={(e) => setNewName(e.target.value)} required />
+              <PanelTitle icon={Package} title="Add New Product (Up to 4 Photos)" action="" />
+              <form onSubmit={handleAddProduct} style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "18px" }}>
+                
+                {/* নাম এবং দাম */}
+                <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+                  <div className="search-box" style={{ flex: 1, minWidth: "220px", maxWidth: "100%" }}>
+                    <Package size={18} />
+                    <input type="text" placeholder="Product Name (e.g. iPhone 13 Pro Max)" value={newName} onChange={(e) => setNewName(e.target.value)} required />
+                  </div>
+                  <div className="search-box" style={{ flex: 1, minWidth: "180px", maxWidth: "100%" }}>
+                    <CircleDollarSign size={18} />
+                    <input type="text" placeholder="Price (e.g. 45000)" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} required />
+                  </div>
                 </div>
-                <div className="search-box" style={{ flex: 1, maxWidth: "100%" }}>
-                  <CircleDollarSign size={18} />
-                  <input type="text" placeholder="Price (e.g. 99.00)" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} required />
+
+                {/* ৪টি ছবি আপলোড করার গ্যালারি বক্স */}
+                <div>
+                  <label style={{ color: "#9db5d8", fontSize: "12px", display: "block", marginBottom: "8px" }}>
+                    📸 প্রোডাক্টের ৩-৪টি ছবি সিলেক্ট করুন (চাইলে ১ম বক্সে একসাথে ৪টি ছবি সিলেক্ট করতে পারবেন অথবা আলাদা আলাদা বক্সে দিতে পারবেন):
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "12px" }}>
+                    {[0, 1, 2, 3].map((slotIdx) => {
+                      const currentFile = imageFiles[slotIdx];
+                      return (
+                        <div
+                          key={slotIdx}
+                          className="search-box"
+                          style={{
+                            maxWidth: "100%",
+                            height: "52px",
+                            cursor: "pointer",
+                            position: "relative",
+                            border: currentFile ? "1px solid #00e5a7" : "1px dashed #2b4c7e",
+                            background: currentFile ? "rgba(0, 229, 167, 0.08)" : "#071426",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "0 12px"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+                            {currentFile ? (
+                              <img
+                                src={URL.createObjectURL(currentFile)}
+                                alt=""
+                                style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }}
+                              />
+                            ) : (
+                              <UploadCloud size={18} color={slotIdx === 0 ? "#a28aff" : "#8fa6ca"} />
+                            )}
+                            <span style={{ color: currentFile ? "#00e5a7" : "#8fa6ca", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {currentFile
+                                ? currentFile.name
+                                : slotIdx === 0
+                                ? "Photo 1 (Main) *"
+                                : `Photo ${slotIdx + 1} (Optional)`}
+                            </span>
+                          </div>
+
+                          {currentFile && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeSelectedImage(slotIdx);
+                              }}
+                              style={{
+                                position: "relative",
+                                zIndex: 5,
+                                background: "rgba(255,60,103,0.2)",
+                                border: "none",
+                                color: "#ff3c67",
+                                borderRadius: "4px",
+                                padding: "2px 6px",
+                                cursor: "pointer",
+                                fontSize: "11px",
+                                fontWeight: "bold"
+                              }}
+                              title="Remove photo"
+                            >
+                              ✕
+                            </button>
+                          )}
+
+                          <input
+                            id={`imageUploadInput_${slotIdx}`}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handleSelectProductImages(slotIdx, e.target.files)}
+                            style={{ position: "absolute", opacity: 0, inset: 0, cursor: "pointer", zIndex: 2 }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="search-box" style={{ flex: 1, maxWidth: "100%", cursor: "pointer", position: "relative" }}>
-                  <UploadCloud size={18} />
-                  <span style={{ color: "#8fa6ca", fontSize: "12px", marginLeft: "5px" }}>
-                    {imageFile ? imageFile.name : "Choose an Image from PC..."}
-                  </span>
-                  <input id="imageUploadInput" type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} style={{ position: "absolute", opacity: 0, inset: 0, cursor: "pointer" }} />
+
+                <div>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    style={{
+                      background: "linear-gradient(105deg, #752cff, #285eff)",
+                      color: "white",
+                      padding: "0 30px",
+                      borderRadius: "8px",
+                      fontWeight: "600",
+                      border: "none",
+                      cursor: "pointer",
+                      height: "42px"
+                    }}
+                  >
+                    {isSubmitting ? "Uploading Photos..." : `Save Product (${imageFiles.filter(Boolean).length || 0} Photos)`}
+                  </button>
                 </div>
-                <button type="submit" disabled={isSubmitting} style={{ background: "linear-gradient(105deg, #752cff, #285eff)", color: "white", padding: "0 25px", borderRadius: "8px", fontWeight: "600", border: "none", cursor: "pointer", height: "41px" }}>
-                  {isSubmitting ? "Uploading..." : "Save Product"}
-                </button>
               </form>
             </section>
 
@@ -591,27 +746,34 @@ export default function AdminDashboard() {
               <PanelTitle icon={ShoppingCart} title={`Manage Live Products (${filteredProducts.length})`} action="" />
               <div className="product-table">
                 <div className="table-row table-head" style={{ gridTemplateColumns: "30px minmax(0, 1.5fr) 1fr 1fr 50px" }}>
-                  <span>#</span><span>Product</span><span>Price</span><span>Status</span><span>Delete</span>
+                  <span>#</span><span>Product & Photos</span><span>Price</span><span>Status</span><span>Delete</span>
                 </div>
                 {loading ? (
                   <div style={{ padding: "20px", textAlign: "center", color: "#9db5d8" }}>Loading...</div>
                 ) : (
-                  filteredProducts.map((product, index) => (
-                    <div className="table-row" key={product.id} style={{ gridTemplateColumns: "30px minmax(0, 1.5fr) 1fr 1fr 50px" }}>
-                      <span>{index + 1}</span>
-                      <span className="product-name">
-                        <i style={{ overflow: "hidden" }}>
-                          <img src={product.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        </i>
-                        {product.name}
-                      </span>
-                      <span>{product.price}</span>
-                      <span><b className="stock">In Stock</b></span>
-                      <button onClick={() => handleDelete(product.id)} style={{ background: "transparent", border: "none", color: "#ff3c67", cursor: "pointer" }}>
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))
+                  filteredProducts.map((product, index) => {
+                    const prodImgs = extractProductImages(product.image_url);
+                    return (
+                      <div className="table-row" key={product.id} style={{ gridTemplateColumns: "30px minmax(0, 1.5fr) 1fr 1fr 50px" }}>
+                        <span>{index + 1}</span>
+                        <span className="product-name" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
+                            {prodImgs.slice(0, 4).map((url, idx) => (
+                              <i key={idx} style={{ overflow: "hidden", width: "28px", height: "28px", borderRadius: "6px", display: "inline-block" }}>
+                                <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              </i>
+                            ))}
+                          </div>
+                          <span>{product.name} <small style={{ color: "#a28aff" }}>({prodImgs.length} pic)</small></span>
+                        </span>
+                        <span>{product.price}</span>
+                        <span><b className="stock">In Stock</b></span>
+                        <button onClick={() => handleDelete(product.id)} style={{ background: "transparent", border: "none", color: "#ff3c67", cursor: "pointer" }}>
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </section>
@@ -1025,7 +1187,7 @@ export default function AdminDashboard() {
             <section className="panel" style={{ padding: "25px", lineHeight: "1.7" }}>
               <PanelTitle icon={CircleHelp} title="Admin Panel Guide & Help Center" action="" />
               <ul style={{ color: "#c0d1f6", paddingLeft: "18px" }}>
-                <li><strong>Products:</strong> নতুন প্রোডাক্টের নাম, দাম এবং ছবি দিয়ে Save করলেই মেইন ওয়েবসাইটে লাইভ হয়ে যাবে।</li>
+                <li><strong>Products:</strong> নতুন প্রোডাক্টের নাম, দাম এবং ১ থেকে ৪টি ছবি দিয়ে Save করলেই মেইন ওয়েবসাইটে লাইভ হয়ে যাবে।</li>
                 <li><strong>Orders:</strong> কাস্টমার অর্ডার করলে এখানে আসবে। ডেলিভারি হয়ে গেলে <b>Mark Deliver</b> বাটনে ক্লিক করবেন, আর ফেক অর্ডার হলে ডিলিট (🗑️) করে দেবেন।</li>
                 <li><strong>Discounts:</strong> যেকোনো প্রোডাক্টে এক ক্লিকে ১০% বা ২০% ছাড় দিতে পারবেন।</li>
                 <li><strong>Chat:</strong> কাস্টমারকে সরাসরি কল বা WhatsApp-এ মেসেজ পাঠাতে পারবেন।</li>
