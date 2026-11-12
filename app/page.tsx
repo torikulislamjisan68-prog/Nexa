@@ -508,7 +508,7 @@ export default function NexaStore() {
             />
           </div>
           <div className="flex items-center gap-2.5 mt-4" onClick={(e) => e.stopPropagation()}>
-            {galleryImages.map((imgObj, idx) => (
+            {galleryImages.map((imgObj: (typeof galleryImages)[number], idx: number) => (
               <button
                 key={idx}
                 onClick={() => setActiveImageIdx(idx)}
@@ -977,7 +977,7 @@ export default function NexaStore() {
 
               {/* নিচে ৪টি থাম্বনেইল ছবি (Click to switch image) */}
               <div className="grid grid-cols-4 gap-2.5 mt-3">
-                {galleryImages.map((imgObj, idx) => (
+                {galleryImages.map((imgObj: (typeof galleryImages)[number], idx: number) => (
                   <button
                     key={idx}
                     type="button"
