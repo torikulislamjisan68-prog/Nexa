@@ -976,8 +976,8 @@ export default function NexaStore() {
               </div>
 
               {/* নিচে ৪টি থাম্বনেইল ছবি (Click to switch image) */}
-              <div cgallelassName="grid grid-cols-4 gap-2.5 mt-3">
-                {ryImages.map((imgObj: (typeof galleryImages)[number], idx: number) => (
+              <div className="grid grid-cols-4 gap-2.5 mt-3">
+                {galleryImages.map((imgObj: (typeof galleryImages)[number], idx: number) => (
                   <button
                     key={idx}
                     type="button"
