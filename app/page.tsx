@@ -74,21 +74,23 @@ export default function NexaStore() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 🧠 ১. SMART AUTO-BRAND DETECTOR (প্রোডাক্টের নাম দেখে অটোমেটিক আসল ব্র্যান্ড বের করবে)
+  // 🧠 ১. SMART AUTO-BRAND DETECTOR (যেকোনো প্রোডাক্টের নাম বা ধরন দেখে নিজে থেকে ব্র্যান্ড বের করবে, কখনোই No Brand দেখাবে না)
   const getProductBrand = (product: any): string => {
-    if (!product) return 'No Brand';
+    if (!product) return 'NEXA Official';
 
-    if (product.brand && product.brand.trim() !== '') {
+    if (product.brand && product.brand.trim() !== '' && product.brand.trim().toLowerCase() !== 'no brand') {
       return product.brand.trim();
     }
 
     const title = (product.name || '').toLowerCase();
+    const category = (product.category || '').toLowerCase();
     const compactTitle = title.replace(/[\s-_]/g, '');
 
     const brandRules: { keywords: string[]; brandName: string }[] = [
+      // গ্লোবাল মোবাইল ও টেক ব্র্যান্ড
       { keywords: ['iphone', 'ipad', 'macbook', 'airpod', 'apple', 'imac', 'iwatch'], brandName: 'Apple' },
       { keywords: ['samsung', 'galaxy'], brandName: 'Samsung' },
-      { keywords: ['xiaomi', 'redmi', 'poco', 'miband'], brandName: 'Xiaomi' },
+      { keywords: ['xiaomi', 'redmi', 'poco', 'miband', 'mijia'], brandName: 'Xiaomi' },
       { keywords: ['realme', 'narzo'], brandName: 'Realme' },
       { keywords: ['vivo', 'iqoo'], brandName: 'Vivo' },
       { keywords: ['oppo', 'reno'], brandName: 'Oppo' },
@@ -105,15 +107,34 @@ export default function NexaStore() {
       { keywords: ['walton'], brandName: 'Walton' },
       { keywords: ['sony', 'playstation', 'ps5', 'ps4'], brandName: 'Sony' },
       { keywords: ['jbl'], brandName: 'JBL' },
+      { keywords: ['awei'], brandName: 'Awei' },
       { keywords: ['anker', 'soundcore'], brandName: 'Anker' },
       { keywords: ['baseus'], brandName: 'Baseus' },
       { keywords: ['joyroom'], brandName: 'Joyroom' },
       { keywords: ['remax'], brandName: 'Remax' },
       { keywords: ['hoco'], brandName: 'Hoco' },
       { keywords: ['oraimo'], brandName: 'Oraimo' },
+      { keywords: ['ugreen'], brandName: 'UGREEN' },
       { keywords: ['haylou'], brandName: 'Haylou' },
       { keywords: ['amazfit'], brandName: 'Amazfit' },
       { keywords: ['colmi'], brandName: 'Colmi' },
+      { keywords: ['t800', 't900', 'ultra watch', 'smartwatch'], brandName: 'Watch Ultra' },
+      { keywords: ['m10', 'm19', 'tws', 'earbud', 'airdots'], brandName: 'SoundCore' },
+
+      // চায়না স্মার্ট গ্যাজেট ও এক্সেসরিজ ব্র্যান্ড (অটো ডিটেকশন)
+      { keywords: ['k8', 'k9', 'k35', 'sx9', 'boya', 'ulanzi', 'lavalier', 'microphone', 'wireless mic'], brandName: 'BOYA / K9 Pro' },
+      { keywords: ['massager', 'kneading', 'neck', 'shoulder', 'massage'], brandName: 'SKG Wellness' },
+      { keywords: ['humidifier', 'diffuser', 'aroma', 'flame', 'rain cloud', 'mushroom lamp', 'air purifier'], brandName: 'Kinscoter' },
+      { keywords: ['g-shape', 'gshape', 'wireless charger', 'rgb light speaker', 'night light speaker'], brandName: 'G-Smart Tech' },
+      { keywords: ['astronaut', 'galaxy', 'nebula', 'star projector', 'projector lamp'], brandName: 'AstroStar' },
+      { keywords: ['cooler', 'cooling fan', 'gaming fan', 'magnetic fan', 'radiator', 'memo', 'black shark'], brandName: 'MEMO Gaming' },
+      { keywords: ['instant print', 'thermal print', 'kids camera', 'mini camera'], brandName: 'KidsCam Pro' },
+      { keywords: ['desk fan', 'mini fan', 'portable fan', 'rechargeable fan', 'hand fan', 'neck fan', 'jisulife'], brandName: 'JISULIFE' },
+      { keywords: ['portable speaker', 'bluetooth speaker', 'rgb speaker', 'bass boost', 'wireless speaker'], brandName: 'Awei Audio' },
+      { keywords: ['power bank', 'powerbank', '20000mah', '10000mah'], brandName: 'Baseus' },
+      { keywords: ['sandisk', 'memory card', 'pendrive', 'sd card'], brandName: 'SanDisk' },
+
+      // কম্পিউটার, ঘড়ি, ফ্যাশন ও লাইফস্টাইল ব্র্যান্ড
       { keywords: ['lenovo', 'thinkpad', 'ideapad'], brandName: 'Lenovo' },
       { keywords: ['asus', 'rog', 'zenbook', 'vivobook'], brandName: 'ASUS' },
       { keywords: ['dell', 'inspiron', 'alienware'], brandName: 'Dell' },
@@ -144,7 +165,7 @@ export default function NexaStore() {
       { keywords: ['gucci'], brandName: 'Gucci' },
       { keywords: ['louisvuitton'], brandName: 'Louis Vuitton' },
       { keywords: ['zara'], brandName: 'Zara' },
-      { keywords: ['levi', 'levis'], brandName: "Levi's" },
+      { keywords: ['levi', 'levis', 'denim', 'jeans', 'cargo'], brandName: "Levi's" },
       { keywords: ['aarong'], brandName: 'Aarong' },
       { keywords: ['bata'], brandName: 'Bata' },
       { keywords: ['apex'], brandName: 'Apex' },
@@ -155,7 +176,7 @@ export default function NexaStore() {
       { keywords: ['singer'], brandName: 'Singer' },
       { keywords: ['vision'], brandName: 'Vision' },
       { keywords: ['miyako'], brandName: 'Miyako' },
-      { keywords: ['kemei'], brandName: 'Kemei' },
+      { keywords: ['kemei', 'trimmer', 'shaver', 'clipper'], brandName: 'Kemei' },
       { keywords: ['vintage', 't9'], brandName: 'Vintage' },
       { keywords: ['cerave'], brandName: 'CeraVe' },
       { keywords: ['theordinary'], brandName: 'The Ordinary' },
@@ -163,17 +184,43 @@ export default function NexaStore() {
       { keywords: ['loreal'], brandName: "L'Oreal" },
       { keywords: ['dove'], brandName: 'Dove' },
       { keywords: ['nivea'], brandName: 'Nivea' },
+      { keywords: ['serum', 'facial', 'skincare', 'roller', 'glow'], brandName: 'BioAqua' },
+      { keywords: ['gripper', 'exercise', 'dumbbell', 'gym', 'fitness'], brandName: 'Domyos Sports' },
+      { keywords: ['container', 'bowl', 'kitchen', 'organizer', 'storage'], brandName: 'HomeLux' },
     ];
 
     for (const rule of brandRules) {
       for (const kw of rule.keywords) {
-        if (compactTitle.includes(kw) || title.includes(kw)) {
+        if (compactTitle.includes(kw.replace(/[\s-_]/g, '')) || title.includes(kw)) {
           return rule.brandName;
         }
       }
     }
 
-    return 'No Brand';
+    // প্রোডাক্টের নামের ভেতর থেকে স্মার্টলি ব্র্যান্ড নাম খুঁজে বের করা (যদি লিস্টের বাইরে কোনো নতুন প্রোডাক্ট হয়)
+    const genericWords = new Set([
+      'smart', 'mini', 'super', 'cute', 'high', 'speed', 'high-speed', '3d', '6d', '4d', 'new', 'best',
+      'premium', 'original', 'portable', 'wireless', 'electric', 'digital', 'led', 'rgb', 'bass', 'boost',
+      'men', 'women', 'kids', 'baby', 'auto', 'fast', 'heavy', 'duty', 'pro', 'ultra', 'max', 'plus',
+      'rechargeable', 'waterproof', 'magnetic', 'realistic', 'hand', 'air', 'ice', 'dual', 'instant', 'luxury'
+    ]);
+
+    const rawWords = (product.name || '').trim().split(/[\s-]+/);
+    for (const w of rawWords) {
+      const cleanWord = w.replace(/[^a-zA-Z0-9]/g, '');
+      if (cleanWord.length >= 3 && !genericWords.has(cleanWord.toLowerCase())) {
+        return cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1);
+      }
+    }
+
+    // ক্যাটাগরি অনুযায়ী স্মার্ট ডিফল্ট ব্র্যান্ড
+    if (category.includes('elect') || category.includes('gadget') || category.includes('mobile')) return 'Baseus Tech';
+    if (category.includes('fash') || category.includes('cloth')) return 'Zara Fashion';
+    if (category.includes('home') || category.includes('decor')) return 'HomeLux';
+    if (category.includes('health') || category.includes('care')) return 'SKG Care';
+    if (category.includes('sport')) return 'ProSports';
+
+    return `${settings.store_name || 'NEXA'} Official`;
   };
 
   // 🌟 ২. SMART DYNAMIC RATING, SOLD & MULTI-REVIEW GENERATOR (প্রতিটি প্রোডাক্টে আলাদা রিভিউ ও সোল্ড দেখাবে)
@@ -241,37 +288,88 @@ export default function NexaStore() {
     };
   };
 
-  // 🖼️ প্রোডাক্টের ৪টি ছবির গ্যালারি তৈরি করার ফাংশন
+  // 🖼️ প্রোডাক্টের ১ম মেইন ছবি বের করার ফাংশন (যদি image_url এ একাধিক ছবি থাকে তবুও সঠিক থাকবে)
+  const getPrimaryImage = (product: any): string => {
+    if (!product) return '';
+    const raw = product.image_url;
+    if (!raw) return '';
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed[0]) return parsed[0];
+        } catch {}
+      }
+      if (trimmed.includes('|')) return trimmed.split('|')[0].trim();
+      if (trimmed.includes('\n')) return trimmed.split('\n')[0].trim();
+    }
+    return raw;
+  };
+
+  // 🖼️ প্রোডাক্টের ৪টি আলাদা ছবির গ্যালারি তৈরি করার ফাংশন (জুম ইন/আউট ছাড়া আসল ৪টি ছবি দেখাবে)
   const getProductGallery = (product: any) => {
     if (!product) return [];
-    const customImages = [
-      product.image_url,
-      product.image_url_2 || product.image2,
-      product.image_url_3 || product.image3,
-      product.image_url_4 || product.image4,
+
+    let collectedUrls: string[] = [];
+
+    // ১. যদি images বা gallery কলামে অ্যারে বা JSON আকারে ৪টি ছবি থাকে
+    const arrayCandidates = [product.images, product.gallery, product.image_urls, product.extra_images];
+    for (const candidate of arrayCandidates) {
+      if (Array.isArray(candidate) && candidate.length > 0) {
+        collectedUrls.push(...candidate.filter(Boolean));
+      } else if (typeof candidate === 'string' && candidate.trim() !== '') {
+        const str = candidate.trim();
+        if (str.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(str);
+            if (Array.isArray(parsed)) collectedUrls.push(...parsed.filter(Boolean));
+          } catch {}
+        } else if (str.includes('|') || str.includes(',') || str.includes('\n')) {
+          collectedUrls.push(...str.split(/[|\n,]+/).map((s: string) => s.trim()).filter(Boolean));
+        }
+      }
+    }
+
+    // ২. যদি image_url এর ভেতরে একাধিক ছবির লিংক থাকে
+    if (typeof product.image_url === 'string' && product.image_url.trim() !== '') {
+      const rawMain = product.image_url.trim();
+      if (rawMain.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(rawMain);
+          if (Array.isArray(parsed)) collectedUrls.push(...parsed.filter(Boolean));
+        } catch {}
+      } else if (rawMain.includes('|') || rawMain.includes('\n')) {
+        collectedUrls.push(...rawMain.split(/[|\n]+/).map((s: string) => s.trim()).filter(Boolean));
+      } else if (rawMain.includes(',http')) {
+        collectedUrls.push(...rawMain.split(/,(?=https?:\/\/)/).map((s: string) => s.trim()).filter(Boolean));
+      } else {
+        collectedUrls.push(rawMain);
+      }
+    }
+
+    // ৩. আলাদা আলাদা কলামে থাকলে (image_url_2, image2, img2 ইত্যাদি)
+    const separateFields = [
+      product.image_url_1 || product.image1 || product.img1,
+      product.image_url_2 || product.image2 || product.img2,
+      product.image_url_3 || product.image3 || product.img3,
+      product.image_url_4 || product.image4 || product.img4,
     ].filter(Boolean);
 
-    if (Array.isArray(product.images) && product.images.length >= 2) {
-      return product.images.slice(0, 4).map((url: string) => ({
+    collectedUrls.push(...separateFields);
+
+    // ডুপ্লিকেট বাদ দিয়ে ৪টি ছবি নেওয়া
+    const uniqueUrls = Array.from(new Set(collectedUrls.filter(Boolean))).slice(0, 4);
+
+    if (uniqueUrls.length > 0) {
+      return uniqueUrls.map((url) => ({
         url,
         imgClass: 'scale-100 object-center'
       }));
     }
 
-    if (customImages.length >= 2) {
-      return customImages.map((url) => ({
-        url,
-        imgClass: 'scale-100 object-center'
-      }));
-    }
-
-    const mainImg = product.image_url;
-    return [
-      { url: mainImg, imgClass: 'scale-100 object-center' },
-      { url: mainImg, imgClass: 'scale-125 object-center' },
-      { url: mainImg, imgClass: 'scale-115 object-top' },
-      { url: mainImg, imgClass: 'scale-115 object-bottom' },
-    ];
+    const mainImg = getPrimaryImage(product);
+    return [{ url: mainImg, imgClass: 'scale-100 object-center' }];
   };
 
   // 💰 দাম ও কাটা দাম (Original Price) বের করার ফাংশন
@@ -299,7 +397,15 @@ export default function NexaStore() {
     async function fetchData() {
       const { data: pData } = await supabase.from('products').select('*').order('id', { ascending: false });
       if (pData && pData.length > 0) {
-        setProducts(pData);
+        const normalized = pData.map((item: any) => {
+          const gallery = getProductGallery(item).map((g) => g.url);
+          return {
+            ...item,
+            image_url: gallery[0] || item.image_url,
+            images: gallery
+          };
+        });
+        setProducts(normalized);
       } else {
         setProducts(defaultProducts);
       }
