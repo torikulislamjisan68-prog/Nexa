@@ -8,9 +8,9 @@ import {
   Megaphone, Wallet, Warehouse, BadgePercent, Grid2X2, Mail,
   MessageCircle, FileText, Settings, CircleHelp, LogOut, Search,
   Moon, Bell, Maximize, ChevronRight, ChevronDown, ShoppingCart,
-  CircleDollarSign, Crown, Zap, Menu, CreditCard, Plus, Trash2,
-  Lock, CheckCircle2, CircleAlert, UploadCloud, Store, Type,
-  Image as ImageIcon, X, Pencil, Tag, RefreshCw
+  CircleDollarSign, Crown, Zap, Menu, CreditCard, Trash2,
+  Lock, CheckCircle2, UploadCloud, Store, Type,
+  Image as ImageIcon, X, Pencil, Tag, Layers, Sparkles
 } from "lucide-react";
 
 const menu = [
@@ -25,6 +25,46 @@ const menu = [
   { name: "Discounts", icon: BadgePercent, arrow: true },
   { name: "Apps", icon: Grid2X2, arrow: true },
 ];
+
+const DEFAULT_CATEGORIES = [
+  "Phones & Accessories",
+  "Gadgets & Electronics",
+  "Health & Beauty",
+  "Fashion & Lifestyle",
+  "Home & Kitchen",
+  "Watches & Jewelry",
+  "Baby & Kids",
+  "General / Others"
+];
+
+// 🧠 প্রোডাক্টের নাম দেখে অটোমেটিক ক্যাটাগরি চেনার স্মার্ট ফাংশন
+function detectAutoCategory(name = "") {
+  const n = name.toLowerCase();
+  if (!n.trim()) return "General / Others";
+
+  if (/(iphone|i phone|samsung|galaxy|xiaomi|redmi|realme|oppo|vivo|oneplus|pixel|phone|mobile|casing|cover|charger|cable|powerbank|adapter|sim)/.test(n)) {
+    return "Phones & Accessories";
+  }
+  if (/(massager|neck|kneading|face|skin|hair|trimmer|shaver|dryer|straightener|cream|serum|oil|beauty|health|care|makeup|perfume|lotion)/.test(n)) {
+    return "Health & Beauty";
+  }
+  if (/(watch|smartwatch|band|clock|ring|bracelet|necklace|earring|jewelry)/.test(n)) {
+    return "Watches & Jewelry";
+  }
+  if (/(airpod|earbud|headphone|earphone|speaker|bluetooth|camera|drone|laptop|mouse|keyboard|led|light|fan|mini|usb|gadget|electronic|mic|tripod)/.test(n)) {
+    return "Gadgets & Electronics";
+  }
+  if (/(shirt|t-shirt|tshirt|pant|jeans|panjabi|punjabi|saree|dress|kurti|hoodie|jacket|shoe|sneaker|bag|wallet|belt|sunglass|cap|fashion)/.test(n)) {
+    return "Fashion & Lifestyle";
+  }
+  if (/(blender|juicer|mixer|kitchen|cooker|pan|pot|knife|bottle|flask|mug|cup|lamp|pillow|bed|organizer|mop|cleaner|home|rack)/.test(n)) {
+    return "Home & Kitchen";
+  }
+  if (/(baby|kid|toy|diaper|stroller|doll|game|puzzle)/.test(n)) {
+    return "Baby & Kids";
+  }
+  return "Gadgets & Electronics";
+}
 
 function PanelTitle({ icon: Icon, title, action = "", onAction }) {
   return (
@@ -75,10 +115,10 @@ function getGreeting(lang = "English") {
   }
 }
 
-// প্রোডাক্টের ছবি, Real Price, Discount Price, Stock Status এবং Offer বের করার হেল্পার ফাংশন
+// প্রোডাক্টের ছবি, Real Price, Discount Price, Stock Status, Offer এবং Category বের করার হেল্পার ফাংশন
 function parseProductData(product) {
   const rawUrl = String(product?.image_url || "");
-  let meta = { realPrice: "", discountPrice: "", stock: "In Stock", offer: "" };
+  let meta = { realPrice: "", discountPrice: "", stock: "In Stock", offer: "", category: "" };
   let cleanUrlForGallery = rawUrl;
 
   if (rawUrl.includes("#meta=")) {
@@ -101,17 +141,20 @@ function parseProductData(product) {
   const discountPriceNum = meta.discountPrice ? parsePrice(meta.discountPrice) : 0;
   const sellingPriceNum = discountPriceNum > 0 ? discountPriceNum : realPriceNum;
 
+  const finalCategory = meta.category || product?.category || detectAutoCategory(product?.name || "");
+
   return {
     images,
     realPrice: realPriceNum,
     discountPrice: discountPriceNum,
     sellingPrice: sellingPriceNum,
     stock: meta.stock || "In Stock",
-    offer: meta.offer || ""
+    offer: meta.offer || "",
+    category: finalCategory
   };
 }
 
-// ডাটাবেসে কোনোরকম কলাম এরর ছাড়াই ছবি + Real Price + Discount Price + Stock + Offer সেভ করার হেল্পার
+// ডাটাবেসে কলাম এরর ছাড়াই ছবি + Real Price + Discount Price + Stock + Offer + Category সেভ করার হেল্পার
 function buildProductImageUrl(urlsArray, metaObj) {
   const validUrls = (urlsArray || []).filter(Boolean);
   const mainUrl = validUrls[0] || "https://via.placeholder.com/200";
@@ -122,7 +165,8 @@ function buildProductImageUrl(urlsArray, metaObj) {
       realPrice: metaObj.realPrice ? String(parsePrice(metaObj.realPrice)) : "",
       discountPrice: metaObj.discountPrice ? String(parsePrice(metaObj.discountPrice)) : "",
       stock: metaObj.stock || "In Stock",
-      offer: metaObj.offer || ""
+      offer: metaObj.offer || "",
+      category: metaObj.category || "General / Others"
     })
   );
 
@@ -164,19 +208,23 @@ export default function AdminDashboard() {
   const [bannerFile, setBannerFile] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  // 🎁 Global Offer Banner Control State (Admin Panel থেকে কন্ট্রোল করার জন্য)
+  // 🎁 Global Offer Banner Control State
   const [globalOfferText, setGlobalOfferText] = useState("");
   const [globalOfferActive, setGlobalOfferActive] = useState(true);
 
   const [loading, setLoading] = useState(true);
 
-  // 🖼️ প্রোডাক্ট আপলোড এবং এডিট করার স্টেটসমূহ
+  // 🖼️ প্রোডাক্ট আপলোড, ক্যাটাগরি এবং এডিট করার স্টেটসমূহ
   const [editingProductId, setEditingProductId] = useState(null);
   const [newName, setNewName] = useState("");
   const [newRealPrice, setNewRealPrice] = useState("");
   const [newDiscountPrice, setNewDiscountPrice] = useState("");
   const [newStockStatus, setNewStockStatus] = useState("In Stock");
   const [newOfferTag, setNewOfferTag] = useState("");
+  const [categoryMode, setCategoryMode] = useState("AUTO"); // "AUTO", specific category, or "CUSTOM"
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("All");
+
   const [existingImageUrls, setExistingImageUrls] = useState([null, null, null, null]);
   const [imageFiles, setImageFiles] = useState([null, null, null, null]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -280,6 +328,14 @@ export default function AdminDashboard() {
     if (inputEl) inputEl.value = "";
   };
 
+  // বর্তমান প্রোডাক্টের ফাইনাল ক্যাটাগরি বের করা
+  const resolvedCategory =
+    categoryMode === "AUTO"
+      ? detectAutoCategory(newName)
+      : categoryMode === "CUSTOM"
+      ? customCategoryInput.trim() || "General / Others"
+      : categoryMode;
+
   // ✏️ প্রোডাক্ট এডিট মোডে ওপেন করার ফাংশন
   const handleStartEditProduct = (product) => {
     const parsed = parseProductData(product);
@@ -289,6 +345,17 @@ export default function AdminDashboard() {
     setNewDiscountPrice(parsed.discountPrice ? String(parsed.discountPrice) : "");
     setNewStockStatus(parsed.stock || "In Stock");
     setNewOfferTag(parsed.offer || "");
+
+    if (DEFAULT_CATEGORIES.includes(parsed.category)) {
+      setCategoryMode(parsed.category);
+      setCustomCategoryInput("");
+    } else if (parsed.category) {
+      setCategoryMode("CUSTOM");
+      setCustomCategoryInput(parsed.category);
+    } else {
+      setCategoryMode("AUTO");
+      setCustomCategoryInput("");
+    }
 
     const slots = [null, null, null, null];
     parsed.images.slice(0, 4).forEach((url, idx) => {
@@ -310,6 +377,8 @@ export default function AdminDashboard() {
     setNewDiscountPrice("");
     setNewStockStatus("In Stock");
     setNewOfferTag("");
+    setCategoryMode("AUTO");
+    setCustomCategoryInput("");
     setExistingImageUrls([null, null, null, null]);
     setImageFiles([null, null, null, null]);
     [0, 1, 2, 3].forEach((idx) => {
@@ -351,7 +420,8 @@ export default function AdminDashboard() {
       realPrice: realNum,
       discountPrice: discNum > 0 ? discNum : "",
       stock: newStockStatus,
-      offer: newOfferTag
+      offer: newOfferTag,
+      category: resolvedCategory
     });
 
     const payload = {
@@ -371,7 +441,11 @@ export default function AdminDashboard() {
     }
 
     if (!error) {
-      alert(editingProductId ? "✅ প্রোডাক্ট সফলভাবে এডিট ও আপডেট হয়েছে!" : "✅ নতুন প্রোডাক্ট সফলভাবে অ্যাড হয়েছে!");
+      alert(
+        editingProductId
+          ? `✅ প্রোডাক্ট সফলভাবে আপডেট হয়েছে! (Category: ${resolvedCategory})`
+          : `✅ নতুন প্রোডাক্ট সফলভাবে অ্যাড হয়েছে! (Category: ${resolvedCategory})`
+      );
       resetProductForm();
       fetchData();
     } else {
@@ -389,7 +463,8 @@ export default function AdminDashboard() {
       realPrice: parsed.realPrice,
       discountPrice: parsed.discountPrice > 0 ? parsed.discountPrice : "",
       stock: nextStock,
-      offer: parsed.offer
+      offer: parsed.offer,
+      category: parsed.category
     });
 
     const { error } = await supabase
@@ -416,12 +491,12 @@ export default function AdminDashboard() {
     const baseReal = parsed.realPrice || parsePrice(product.price);
 
     if (percent === 0) {
-      // Reset to Real Price
       const updatedImageUrl = buildProductImageUrl(parsed.images, {
         realPrice: baseReal,
         discountPrice: "",
         stock: parsed.stock,
-        offer: ""
+        offer: "",
+        category: parsed.category
       });
       await supabase.from("products").update({ price: `৳${baseReal}`, image_url: updatedImageUrl }).eq("id", product.id);
     } else {
@@ -430,7 +505,8 @@ export default function AdminDashboard() {
         realPrice: baseReal,
         discountPrice: discounted,
         stock: parsed.stock,
-        offer: `${percent}% OFF`
+        offer: `${percent}% OFF`,
+        category: parsed.category
       });
       await supabase.from("products").update({ price: `৳${discounted}`, image_url: updatedImageUrl }).eq("id", product.id);
     }
@@ -450,7 +526,8 @@ export default function AdminDashboard() {
       realPrice: baseReal,
       discountPrice: discNum,
       stock: parsed.stock,
-      offer: percentOff > 0 ? `${percentOff}% OFF` : parsed.offer
+      offer: percentOff > 0 ? `${percentOff}% OFF` : parsed.offer,
+      category: parsed.category
     });
 
     await supabase.from("products").update({ price: `৳${discNum}`, image_url: updatedImageUrl }).eq("id", product.id);
@@ -463,7 +540,6 @@ export default function AdminDashboard() {
     localStorage.setItem("nexa_global_offer", globalOfferText);
     localStorage.setItem("nexa_global_offer_active", String(globalOfferActive));
 
-    // অপশনালি স্টোরের সাবটাইটেলেও অফার আপডেট করে দেওয়া যাবে যদি চায়
     if (globalOfferActive && globalOfferText) {
       await supabase.from("store_settings").update({
         hero_subtitle: globalOfferText
@@ -511,7 +587,6 @@ export default function AdminDashboard() {
       }
     }
 
-    // Save Admin Name & Photo
     localStorage.setItem("nexa_admin_name", adminName);
     if (finalAdminAvatarUrl) {
       localStorage.setItem("nexa_admin_avatar", finalAdminAvatarUrl);
@@ -580,9 +655,22 @@ export default function AdminDashboard() {
     icon: o.status === "Delivered" ? CheckCircle2 : ShoppingCart,
   }));
 
-  // Search filtering
+  // সব প্রোডাক্টের ব্যবহৃত ক্যাটাগরি লিস্ট বের করা
+  const availableCategories = ["All", ...Array.from(new Set(dbProducts.map((p) => parseProductData(p).category)))];
+
+  // Search & Category filtering
   const q = searchQuery.toLowerCase().trim();
-  const filteredProducts = q ? dbProducts.filter((p) => (p.name || "").toLowerCase().includes(q) || (p.price || "").toLowerCase().includes(q)) : dbProducts;
+  const filteredProducts = dbProducts.filter((p) => {
+    const parsed = parseProductData(p);
+    const matchesSearch =
+      !q ||
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.price || "").toLowerCase().includes(q) ||
+      (parsed.category || "").toLowerCase().includes(q);
+    const matchesCategory = selectedCategoryFilter === "All" || parsed.category === selectedCategoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
   const filteredOrders = q ? dbOrders.filter((o) => (o.customer_name || "").toLowerCase().includes(q) || (o.customer_phone || "").toLowerCase().includes(q) || (o.product_name || "").toLowerCase().includes(q)) : dbOrders;
   const filteredCustomers = q ? allCustomers.filter((c) => (c.name || "").toLowerCase().includes(q) || (c.phone || "").toLowerCase().includes(q) || (c.address || "").toLowerCase().includes(q)) : allCustomers;
 
@@ -621,6 +709,65 @@ export default function AdminDashboard() {
 
   return (
     <main className="admin-shell" style={{ filter: dimTheme ? "hue-rotate(18deg) brightness(1.08)" : "none" }}>
+      {/* 📱 মোবাইল এবং পিসির জন্য স্পেশাল অ্যান্টি-ওভারল্যাপ (Anti-Overlap) রেসপন্সিভ স্টাইল */}
+      <style>{`
+        .product-table {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 6px;
+        }
+        .product-table .table-row {
+          min-width: 660px;
+          gap: 12px !important;
+          align-items: center !important;
+          padding: 10px 12px !important;
+        }
+        .product-table .table-row > * {
+          min-width: 0 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis;
+        }
+        .safe-product-cell {
+          display: flex !important;
+          align-items: center !important;
+          gap: 10px !important;
+          min-width: 0 !important;
+          width: 100% !important;
+          overflow: hidden !important;
+        }
+        .safe-product-title {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: normal !important;
+          word-break: break-word;
+          line-height: 1.35;
+          font-size: 12px;
+          font-weight: 600;
+          color: #ffffff;
+        }
+        @media (max-width: 768px) {
+          .dashboard-content {
+            padding: 12px !important;
+          }
+          .panel {
+            padding: 15px !important;
+          }
+          .stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 10px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .stats-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
       {isMobileMenuOpen && (
         <div className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)} />
       )}
@@ -704,7 +851,7 @@ export default function AdminDashboard() {
           <label className="search-box">
             <Search size={19} />
             <input
-              placeholder="Search products, orders, customers..."
+              placeholder="Search products, category, orders..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -753,7 +900,7 @@ export default function AdminDashboard() {
                     const parsed = parseProductData(p);
                     return (
                       <div key={p.id} onClick={() => setActiveTab("Products")} style={{ padding: "6px 0", borderBottom: "1px solid #142944", cursor: "pointer" }}>
-                        <b>{p.name}</b> — {formatBDT(parsed.sellingPrice)} ({parsed.stock})
+                        <b>{p.name}</b> — {formatBDT(parsed.sellingPrice)} ({parsed.category})
                       </div>
                     );
                   })}
@@ -889,8 +1036,56 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* স্টক স্ট্যাটাস (In Stock / Out of Stock) এবং স্পেশাল অফার ট্যাগ */}
+                {/* ✨ Auto Category + Manual Category, Stock Status এবং Special Offer */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+                  <div>
+                    <label style={{ color: "#9db5d8", fontSize: "11px", display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                      <span>Category (অটো অথবা ম্যানুয়াল)</span>
+                      <strong style={{ color: "#a28aff" }}>✨ {resolvedCategory}</strong>
+                    </label>
+                    <div className="search-box" style={{ maxWidth: "100%" }}>
+                      <Layers size={18} color="#a28aff" />
+                      <select
+                        value={categoryMode}
+                        onChange={(e) => setCategoryMode(e.target.value)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "#e2ecff",
+                          fontWeight: "600",
+                          width: "100%",
+                          outline: "none",
+                          cursor: "pointer",
+                          fontSize: "12px"
+                        }}
+                      >
+                        <option value="AUTO" style={{ background: "#0b1b34", color: "#00e5a7" }}>
+                          ✨ Auto Detect ({detectAutoCategory(newName)})
+                        </option>
+                        {DEFAULT_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat} style={{ background: "#0b1b34", color: "white" }}>
+                            📂 {cat}
+                          </option>
+                        ))}
+                        <option value="CUSTOM" style={{ background: "#0b1b34", color: "#ffb22f" }}>
+                          ➕ Write Custom Category...
+                        </option>
+                      </select>
+                    </div>
+                    {categoryMode === "CUSTOM" && (
+                      <div className="search-box" style={{ maxWidth: "100%", marginTop: "8px", border: "1px solid #ffb22f" }}>
+                        <Sparkles size={16} color="#ffb22f" />
+                        <input
+                          type="text"
+                          placeholder="নতুন ক্যাটাগরির নাম লিখুন..."
+                          value={customCategoryInput}
+                          onChange={(e) => setCustomCategoryInput(e.target.value)}
+                          required
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   <div>
                     <label style={{ color: "#9db5d8", fontSize: "11px", display: "block", marginBottom: "6px" }}>Stock Status (স্টক স্ট্যাটাস)</label>
                     <div className="search-box" style={{ maxWidth: "100%" }}>
@@ -915,7 +1110,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <div>
-                    <label style={{ color: "#9db5d8", fontSize: "11px", display: "block", marginBottom: "6px" }}>Special Offer Badge / ডিসকাউন্ট অফার লেখা (Optional)</label>
+                    <label style={{ color: "#9db5d8", fontSize: "11px", display: "block", marginBottom: "6px" }}>Special Offer Badge / অফার লেখা</label>
                     <div className="search-box" style={{ maxWidth: "100%" }}>
                       <Tag size={18} color="#ffb22f" />
                       <input
@@ -931,7 +1126,7 @@ export default function AdminDashboard() {
                 {/* ৪টি ছবি আপলোড করার গ্যালারি বক্স */}
                 <div>
                   <label style={{ color: "#9db5d8", fontSize: "12px", display: "block", marginBottom: "8px" }}>
-                    📸 প্রোডাক্টের ১-৪টি ছবি সিলেক্ট করুন (চাইলে একসাথে ৪টি ছবি সিলেক্ট করতে পারবেন অথবা আলাদা আলাদা বক্সে দিতে পারবেন):
+                    📸 প্রোডাক্টের ১-৪টি ছবি সিলেক্ট করুন:
                   </label>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "12px" }}>
                     {[0, 1, 2, 3].map((slotIdx) => {
@@ -1064,14 +1259,39 @@ export default function AdminDashboard() {
 
             <section className="panel products-panel">
               <PanelTitle icon={ShoppingCart} title={`Manage Live Products (${filteredProducts.length})`} action="" />
+
+              {/* 📂 Category Filter Pills */}
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "12px", marginBottom: "6px" }}>
+                {availableCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategoryFilter(cat)}
+                    style={{
+                      background: selectedCategoryFilter === cat ? "linear-gradient(105deg, #752cff, #285eff)" : "#0b1b34",
+                      color: selectedCategoryFilter === cat ? "white" : "#9db5d8",
+                      border: selectedCategoryFilter === cat ? "none" : "1px solid #1b3559",
+                      padding: "6px 12px",
+                      borderRadius: "20px",
+                      fontSize: "11px",
+                      fontWeight: "600",
+                      whiteSpace: "nowrap",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {cat === "All" ? `All Categories (${dbProducts.length})` : cat}
+                  </button>
+                ))}
+              </div>
+
               <div className="product-table">
-                <div className="table-row table-head" style={{ gridTemplateColumns: "35px minmax(0, 1.8fr) 1.2fr 1fr 1fr 90px" }}>
+                <div className="table-row table-head" style={{ gridTemplateColumns: "30px minmax(210px, 2fr) 120px 105px 115px 80px" }}>
                   <span>#</span>
-                  <span>Product & Photos</span>
-                  <span>Real & Discount Price</span>
+                  <span>Product, Photos & Category</span>
+                  <span>Price (BDT)</span>
                   <span>Offer Badge</span>
-                  <span>Stock (Click to change)</span>
-                  <span>Edit / Del</span>
+                  <span>Stock Status</span>
+                  <span>Actions</span>
                 </div>
                 {loading ? (
                   <div style={{ padding: "20px", textAlign: "center", color: "#9db5d8" }}>Loading...</div>
@@ -1085,33 +1305,72 @@ export default function AdminDashboard() {
                         className="table-row"
                         key={product.id}
                         style={{
-                          gridTemplateColumns: "35px minmax(0, 1.8fr) 1.2fr 1fr 1fr 90px",
+                          gridTemplateColumns: "30px minmax(210px, 2fr) 120px 105px 115px 80px",
                           background: editingProductId === product.id ? "rgba(0, 229, 167, 0.08)" : undefined
                         }}
                       >
                         <span>{index + 1}</span>
-                        <span className="product-name" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                            {parsed.images.slice(0, 4).map((url, idx) => (
-                              <i key={idx} style={{ overflow: "hidden", width: "28px", height: "28px", borderRadius: "6px", display: "inline-block" }}>
-                                <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                              </i>
-                            ))}
+
+                        {/* Product Photo + Name + Category (Never overlaps onto price!) */}
+                        <div className="safe-product-cell">
+                          <div style={{ position: "relative", width: "42px", height: "42px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, border: "1px solid #243b61", background: "#071426" }}>
+                            <img
+                              src={parsed.images[0] || "https://via.placeholder.com/100"}
+                              alt=""
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
+                            {parsed.images.length > 1 && (
+                              <span
+                                style={{
+                                  position: "absolute",
+                                  bottom: "2px",
+                                  right: "2px",
+                                  background: "rgba(11, 27, 52, 0.9)",
+                                  color: "#a28aff",
+                                  fontSize: "9px",
+                                  fontWeight: "bold",
+                                  padding: "1px 4px",
+                                  borderRadius: "4px"
+                                }}
+                              >
+                                {parsed.images.length}📷
+                              </span>
+                            )}
                           </div>
-                          <span>
-                            {product.name} <small style={{ color: "#a28aff" }}>({parsed.images.length} pic)</small>
-                          </span>
-                        </span>
+
+                          <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div className="safe-product-title" title={product.name}>
+                              {product.name}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                              <span style={{ background: "rgba(162, 138, 255, 0.14)", color: "#c2b0ff", padding: "1px 7px", borderRadius: "4px", fontSize: "9.5px", fontWeight: "600" }}>
+                                📂 {parsed.category}
+                              </span>
+                              {parsed.images.length > 1 && (
+                                <div style={{ display: "flex", gap: "3px" }}>
+                                  {parsed.images.slice(1, 4).map((imgUrl, i) => (
+                                    <img
+                                      key={i}
+                                      src={imgUrl}
+                                      alt=""
+                                      style={{ width: "14px", height: "14px", borderRadius: "3px", objectFit: "cover", opacity: 0.85 }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
                         {/* Real Price & Discount Price Display */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                           {parsed.discountPrice > 0 ? (
                             <>
                               <strong style={{ color: "#00e5a7", fontSize: "13px" }}>
-                                {formatBDT(parsed.discountPrice)} <small style={{ color: "#a28aff", fontSize: "10px" }}>(Discount)</small>
+                                {formatBDT(parsed.discountPrice)}
                               </strong>
-                              <span style={{ color: "#8fa6ca", textDecoration: "line-through", fontSize: "11px" }}>
-                                Real: {formatBDT(parsed.realPrice)}
+                              <span style={{ color: "#8fa6ca", textDecoration: "line-through", fontSize: "10.5px" }}>
+                                {formatBDT(parsed.realPrice)}
                               </span>
                             </>
                           ) : (
@@ -1124,7 +1383,7 @@ export default function AdminDashboard() {
                         {/* Offer Badge */}
                         <span>
                           {parsed.offer ? (
-                            <b style={{ background: "rgba(255, 178, 47, 0.18)", color: "#ffc456", padding: "3px 8px", borderRadius: "6px", fontSize: "10px" }}>
+                            <b style={{ display: "inline-block", background: "rgba(255, 178, 47, 0.18)", color: "#ffc456", padding: "3px 7px", borderRadius: "6px", fontSize: "10px", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               🔥 {parsed.offer}
                             </b>
                           ) : (
@@ -1142,11 +1401,12 @@ export default function AdminDashboard() {
                               background: isOut ? "rgba(255, 60, 103, 0.2)" : "rgba(0, 229, 167, 0.16)",
                               color: isOut ? "#ff4d79" : "#00e5a7",
                               border: isOut ? "1px solid #ff3c67" : "1px solid #00cfa6",
-                              padding: "4px 10px",
+                              padding: "4px 8px",
                               borderRadius: "6px",
                               fontSize: "10px",
                               fontWeight: "bold",
-                              cursor: "pointer"
+                              cursor: "pointer",
+                              whiteSpace: "nowrap"
                             }}
                           >
                             {isOut ? "❌ Out of Stock" : "✅ In Stock"}
@@ -1154,7 +1414,7 @@ export default function AdminDashboard() {
                         </span>
 
                         {/* Edit & Delete Buttons */}
-                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                           <button
                             type="button"
                             onClick={() => handleStartEditProduct(product)}
@@ -1204,8 +1464,8 @@ export default function AdminDashboard() {
             <section className="panel products-panel">
               <PanelTitle icon={ShoppingBag} title={`Live Customer Orders (${filteredOrders.length})`} action="" />
               <div className="product-table">
-                <div className="table-row table-head" style={{ gridTemplateColumns: "40px 1.5fr 1fr 1fr 1fr 100px 50px" }}>
-                  <span>ID</span><span>Customer Details</span><span>Phone</span><span>Product</span><span>Price (BDT)</span><span>Status</span><span>Delete</span>
+                <div className="table-row table-head" style={{ gridTemplateColumns: "45px minmax(140px, 1.4fr) 110px minmax(140px, 1.4fr) 95px 100px 45px" }}>
+                  <span>ID</span><span>Customer Details</span><span>Phone</span><span>Product</span><span>Price (BDT)</span><span>Status</span><span>Del</span>
                 </div>
                 {loading ? (
                   <div style={{ padding: "20px", textAlign: "center", color: "#9db5d8" }}>Loading orders...</div>
@@ -1213,14 +1473,14 @@ export default function AdminDashboard() {
                   <div style={{ padding: "20px", textAlign: "center", color: "#9db5d8" }}>No orders yet.</div>
                 ) : (
                   filteredOrders.map((order) => (
-                    <div className="table-row" key={order.id} style={{ gridTemplateColumns: "40px 1.5fr 1fr 1fr 1fr 100px 50px", alignItems: "center" }}>
+                    <div className="table-row" key={order.id} style={{ gridTemplateColumns: "45px minmax(140px, 1.4fr) 110px minmax(140px, 1.4fr) 95px 100px 45px", alignItems: "center" }}>
                       <span>#{order.id}</span>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                        <strong style={{ fontSize: "12px", color: "white" }}>{order.customer_name}</strong>
-                        <span style={{ fontSize: "10px", color: "#8fa6ca" }}>{order.customer_address}</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+                        <strong style={{ fontSize: "12px", color: "white", whiteSpace: "normal" }}>{order.customer_name}</strong>
+                        <span style={{ fontSize: "10px", color: "#8fa6ca", whiteSpace: "normal" }}>{order.customer_address}</span>
                       </div>
                       <span>{order.customer_phone}</span>
-                      <span style={{ color: "#d8c6ff" }}>{order.product_name}</span>
+                      <span style={{ color: "#d8c6ff", whiteSpace: "normal", lineHeight: "1.3" }}>{order.product_name}</span>
                       <span style={{ color: "#00e5a7", fontWeight: "bold" }}>{formatBDT(order.price)}</span>
                       {order.status === "Delivered" ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#006b59", color: "#a6ffe7", padding: "4px 8px", borderRadius: "6px", fontSize: "9px", fontWeight: "bold" }}>
@@ -1258,12 +1518,12 @@ export default function AdminDashboard() {
                   filteredCustomers.map((c, index) => (
                     <div className="table-row" key={c.phone || c.name} style={{ gridTemplateColumns: "40px 1.5fr 1fr 1.5fr 100px 110px", alignItems: "center", minHeight: "48px" }}>
                       <span>{index + 1}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
                         <Avatar index={index} />
-                        <strong style={{ fontSize: "12px", color: "white" }}>{c.name}</strong>
+                        <strong style={{ fontSize: "12px", color: "white", whiteSpace: "normal" }}>{c.name}</strong>
                       </div>
                       <span>{c.phone}</span>
-                      <span style={{ color: "#8fa6ca" }}>{c.address}</span>
+                      <span style={{ color: "#8fa6ca", whiteSpace: "normal" }}>{c.address}</span>
                       <span><b className="stock">{c.orders} Orders</b></span>
                       <span style={{ color: "#00e5a7", fontWeight: "bold", fontSize: "12px" }}>{formatBDT(c.total)}</span>
                     </div>
@@ -1404,7 +1664,7 @@ export default function AdminDashboard() {
                   <div className="table-row" key={o.id} style={{ gridTemplateColumns: "60px 1.5fr 1.5fr 1fr 1fr" }}>
                     <span>#{o.id}</span>
                     <strong>{o.customer_name}</strong>
-                    <span>{o.product_name}</span>
+                    <span style={{ whiteSpace: "normal" }}>{o.product_name}</span>
                     <strong style={{ color: "#00e5a7" }}>{formatBDT(o.price)}</strong>
                     <span>
                       <b className={`stock ${o.status === "Delivered" ? "" : "low"}`}>
@@ -1423,30 +1683,32 @@ export default function AdminDashboard() {
             <section className="panel products-panel">
               <PanelTitle icon={Warehouse} title={`Warehouse Inventory (${dbProducts.length} Items)`} action="Add Product" onAction={() => setActiveTab("Products")} />
               <div className="product-table">
-                <div className="table-row table-head" style={{ gridTemplateColumns: "50px 1.8fr 1.2fr 1fr 1.2fr 80px" }}>
-                  <span>ID</span><span>Product Name</span><span>Price (Real / Disc)</span><span>Offer</span><span>Stock Status (Click)</span><span>Edit</span>
+                <div className="table-row table-head" style={{ gridTemplateColumns: "45px minmax(190px, 1.8fr) 120px 120px 130px 75px" }}>
+                  <span>ID</span><span>Product Name</span><span>Category</span><span>Price (BDT)</span><span>Stock Status (Click)</span><span>Edit</span>
                 </div>
                 {dbProducts.map((p) => {
                   const parsed = parseProductData(p);
                   const isOut = parsed.stock === "Out of Stock";
                   return (
-                    <div className="table-row" key={p.id} style={{ gridTemplateColumns: "50px 1.8fr 1.2fr 1fr 1.2fr 80px" }}>
+                    <div className="table-row" key={p.id} style={{ gridTemplateColumns: "45px minmax(190px, 1.8fr) 120px 120px 130px 75px" }}>
                       <span>#{p.id}</span>
-                      <span className="product-name">
-                        <i style={{ overflow: "hidden" }}>
-                          <img src={parsed.images[0] || p.image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        </i>
-                        {p.name}
-                      </span>
+                      <div className="safe-product-cell">
+                        <img
+                          src={parsed.images[0] || p.image_url}
+                          alt=""
+                          style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover", flexShrink: 0 }}
+                        />
+                        <span className="safe-product-title">{p.name}</span>
+                      </div>
+                      <span style={{ color: "#c2b0ff", fontSize: "11px" }}>{parsed.category}</span>
                       <div>
                         <strong style={{ color: "#00e5a7" }}>{formatBDT(parsed.sellingPrice)}</strong>
                         {parsed.discountPrice > 0 && (
-                          <span style={{ color: "#8fa6ca", textDecoration: "line-through", fontSize: "10px", marginLeft: "6px" }}>
+                          <span style={{ color: "#8fa6ca", textDecoration: "line-through", fontSize: "10px", display: "block" }}>
                             {formatBDT(parsed.realPrice)}
                           </span>
                         )}
                       </div>
-                      <span>{parsed.offer || "—"}</span>
                       <span>
                         <button
                           onClick={() => handleToggleStock(p)}
@@ -1461,7 +1723,7 @@ export default function AdminDashboard() {
                             cursor: "pointer"
                           }}
                         >
-                          {isOut ? "❌ Out of Stock" : "✅ Available in Stock"}
+                          {isOut ? "❌ Out of Stock" : "✅ In Stock"}
                         </button>
                       </span>
                       <button
@@ -1495,7 +1757,7 @@ export default function AdminDashboard() {
                 এখান থেকে আপনার ওয়েবসাইটের স্পেশাল ডিসকাউন্ট অফার বা ক্যাম্পেইন মেসেজ কন্ট্রোল করতে পারবেন।
               </p>
               <form onSubmit={handleSaveGlobalOffer} style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
-                <div className="search-box" style={{ flex: 1, minWidth: "250px", maxWidth: "100%" }}>
+                <div className="search-box" style={{ flex: 1, minWidth: "240px", maxWidth: "100%" }}>
                   <BadgePercent size={18} color="#ffb22f" />
                   <input
                     type="text"
@@ -1537,25 +1799,25 @@ export default function AdminDashboard() {
                 যেকোনো প্রোডাক্টের ডিসকাউন্ট দাম সরাসরি লিখে সেট করুন অথবা পাশের বাটনে ক্লিক করে ১০%, ২০% ছাড় দিন বা আসল দামে ফিরিয়ে নিন।
               </p>
               <div className="product-table">
-                <div className="table-row table-head" style={{ gridTemplateColumns: "35px 1.6fr 1fr 1fr 1.4fr 190px" }}>
+                <div className="table-row table-head" style={{ gridTemplateColumns: "35px minmax(170px, 1.5fr) 100px 110px 155px 165px" }}>
                   <span>#</span>
                   <span>Product</span>
                   <span>Real Price (৳)</span>
                   <span>Discount Price (৳)</span>
-                  <span>Set Custom Discount Price</span>
+                  <span>Set Custom Discount</span>
                   <span>Quick Offer Actions</span>
                 </div>
                 {dbProducts.map((p, i) => {
                   const parsed = parseProductData(p);
                   return (
-                    <div className="table-row" key={p.id} style={{ gridTemplateColumns: "35px 1.6fr 1fr 1fr 1.4fr 190px" }}>
+                    <div className="table-row" key={p.id} style={{ gridTemplateColumns: "35px minmax(170px, 1.5fr) 100px 110px 155px 165px" }}>
                       <span>{i + 1}</span>
-                      <strong>
-                        {p.name}{" "}
+                      <div style={{ minWidth: 0 }}>
+                        <div className="safe-product-title">{p.name}</div>
                         {parsed.stock === "Out of Stock" && (
-                          <small style={{ color: "#ff3c67" }}>(Out of Stock)</small>
+                          <small style={{ color: "#ff3c67", fontSize: "10px" }}>(Out of Stock)</small>
                         )}
-                      </strong>
+                      </div>
                       <span style={{ color: "#9db5d8" }}>{formatBDT(parsed.realPrice)}</span>
                       <strong style={{ color: "#00e5a7" }}>
                         {parsed.discountPrice > 0 ? formatBDT(parsed.discountPrice) : "No Discount"}
@@ -1565,7 +1827,7 @@ export default function AdminDashboard() {
                       <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                         <input
                           type="number"
-                          placeholder="নতুন ছাড়ের দাম ৳"
+                          placeholder="নতুন দাম ৳"
                           value={customDiscountInputs[p.id] || ""}
                           onChange={(e) =>
                             setCustomDiscountInputs({ ...customDiscountInputs, [p.id]: e.target.value })
@@ -1576,7 +1838,7 @@ export default function AdminDashboard() {
                             color: "white",
                             padding: "5px 8px",
                             borderRadius: "6px",
-                            width: "110px",
+                            width: "90px",
                             fontSize: "11px"
                           }}
                         />
@@ -1586,7 +1848,7 @@ export default function AdminDashboard() {
                             background: "#00b388",
                             color: "white",
                             border: "none",
-                            padding: "5px 10px",
+                            padding: "5px 9px",
                             borderRadius: "6px",
                             fontSize: "10px",
                             fontWeight: "bold",
@@ -1598,7 +1860,7 @@ export default function AdminDashboard() {
                       </div>
 
                       {/* Quick Discount Buttons */}
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
                         <button
                           onClick={() => handleApplyDiscount(p, 10)}
                           style={{ background: "#315cff", color: "white", border: "none", padding: "5px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "bold", cursor: "pointer" }}
@@ -1759,11 +2021,10 @@ export default function AdminDashboard() {
             <section className="panel" style={{ padding: "25px", lineHeight: "1.7" }}>
               <PanelTitle icon={CircleHelp} title="Admin Panel Guide & Help Center" action="" />
               <ul style={{ color: "#c0d1f6", paddingLeft: "18px" }}>
-                <li><strong>Products (Add & Edit):</strong> নতুন প্রোডাক্টের নাম, আসল দাম (Real Price), ডিসকাউন্ট দাম (Discount Price), স্টক স্ট্যাটাস (In Stock / Out of Stock) এবং ১-৪টি ছবি দিয়ে সেভ করতে পারবেন। আর যেকোনো প্রোডাক্টের পাশের <b>Edit (✏️)</b> বাটনে ক্লিক করে আবার এডিট করতে পারবেন।</li>
+                <li><strong>Smart Auto Category:</strong> প্রোডাক্টের নাম লিখলেই সিস্টেম অটোমেটিক ক্যাটাগরি চিনে নেবে। আর চাইলে ড্রপডাউন থেকে যেকোনো ক্যাটাগরি সিলেক্ট বা নতুন ক্যাটাগরি লিখে দিতে পারবেন।</li>
+                <li><strong>Products (Add & Edit):</strong> নতুন প্রোডাক্টের নাম, আসল দাম (Real Price), ডিসকাউন্ট দাম (Discount Price), স্টক স্ট্যাটাস (In Stock / Out of Stock) এবং ১-৪টি ছবি দিয়ে সেভ করতে পারবেন। আর পাশের <b>Edit (✏️)</b> বাটনে ক্লিক করে আবার এডিট করতে পারবেন।</li>
                 <li><strong>Out of Stock:</strong> প্রোডাক্টের স্টক শেষ হয়ে গেলে লিস্টে থাকা <b>In Stock</b> বাটনে এক ক্লিক করলেই সেটি <b>Out of Stock</b> হয়ে যাবে।</li>
-                <li><strong>Orders:</strong> কাস্টমার অর্ডার করলে এখানে বাংলাদেশী টাকায় (৳) দেখাবে। ডেলিভারি হয়ে গেলে <b>Mark Deliver</b> বাটনে ক্লিক করবেন।</li>
                 <li><strong>Discounts:</strong> পুরো স্টোরের অফার ক্যাম্পেইন এবং যেকোনো প্রোডাক্টের ডিসকাউন্ট দাম এখান থেকে কন্ট্রোল করতে পারবেন।</li>
-                <li><strong>Settings:</strong> এডমিনের নিজের নাম, ছবি এবং ওয়েবসাইটের নাম, ব্যানার ও টাইটেল পরিবর্তন করতে পারবেন।</li>
               </ul>
             </section>
           </div>
