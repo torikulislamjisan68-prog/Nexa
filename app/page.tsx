@@ -5,20 +5,136 @@ import {
   Search, ShoppingCart, Zap, Menu, ChevronRight, ChevronLeft,
   Star, MessageCircle, X, CheckCircle2, ArrowRight,
   Shirt, Smartphone, Home as HomeIcon, Heart, 
-  Trophy, Gamepad2, ShoppingBag, LayoutGrid,
+  Gamepad2, ShoppingBag, LayoutGrid, Watch, Cpu, Sparkles,
   Gift, Crown, Truck, Trash2, Flame, Copy, Check, ShieldCheck,
-  Phone, Mail, MapPin, Headphones, ChevronUp, Send, Share2, Store, Award, RotateCcw,
+  Phone, Mail, MapPin, Headphones, ChevronUp, Send, Share2, Store, Award, RotateCcw, Ban,
   Globe as Facebook, Camera as Instagram, Play as Youtube, Music as Music2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
+// 🧠 প্রোডাক্টের নাম দেখে অটোমেটিক ক্যাটাগরি চেনার স্মার্ট ফাংশন (Admin Panel এর সাথে ১০০% মিলানো)
+function detectAutoCategory(name = "") {
+  const n = name.toLowerCase();
+  if (!n.trim()) return "Gadgets & Electronics";
+
+  if (/(iphone|i phone|samsung|galaxy|xiaomi|redmi|realme|oppo|vivo|oneplus|pixel|phone|mobile|casing|cover|charger|cable|powerbank|power bank|adapter|sim)/.test(n)) {
+    return "Phones & Accessories";
+  }
+  if (/(massager|neck|kneading|face|skin|hair|trimmer|shaver|dryer|straightener|cream|serum|oil|beauty|health|care|makeup|perfume|lotion|roller)/.test(n)) {
+    return "Health & Beauty";
+  }
+  if (/(watch|smartwatch|t800|t900|band|clock|ring|bracelet|necklace|earring|jewelry)/.test(n)) {
+    return "Watches & Jewelry";
+  }
+  if (/(airpod|earbud|tws|headphone|earphone|speaker|bluetooth|camera|drone|laptop|mouse|keyboard|led|light|fan|mini|usb|gadget|electronic|mic|microphone|tripod|humidifier|projector|cooler)/.test(n)) {
+    return "Gadgets & Electronics";
+  }
+  if (/(shirt|t-shirt|tshirt|pant|jeans|cargo|panjabi|punjabi|saree|dress|kurti|hoodie|jacket|shoe|sneaker|bag|wallet|belt|sunglass|cap|fashion)/.test(n)) {
+    return "Fashion & Lifestyle";
+  }
+  if (/(blender|juicer|mixer|kitchen|cooker|pan|pot|knife|bottle|flask|mug|cup|lamp|pillow|bed|organizer|container|bowl|mop|cleaner|home|rack)/.test(n)) {
+    return "Home & Kitchen";
+  }
+  if (/(baby|kid|toy|diaper|stroller|doll|game|puzzle)/.test(n)) {
+    return "Baby & Kids";
+  }
+  return "Gadgets & Electronics";
+}
+
+// 🔗 Admin Panel থেকে পাঠানো ছবি, Real Price, Discount Price, Stock, Offer এবং Category রিড করার মাস্টার ফাংশন
+function normalizeAdminProduct(rawProduct: any) {
+  if (!rawProduct) return null;
+
+  const rawUrl = String(rawProduct.image_url || "");
+  let meta = {
+    realPrice: "",
+    discountPrice: "",
+    stock: "In Stock",
+    offer: "",
+    category: ""
+  };
+  let cleanUrlForGallery = rawUrl;
+
+  if (rawUrl.includes("#meta=")) {
+    const [beforeMeta, afterMeta] = rawUrl.split("#meta=");
+    const [metaEncoded, galleryPart] = afterMeta.split("#gallery=");
+    try {
+      meta = { ...meta, ...JSON.parse(decodeURIComponent(metaEncoded)) };
+    } catch (e) {
+      // ignore parse error
+    }
+    cleanUrlForGallery = galleryPart ? `${beforeMeta}#gallery=${galleryPart}` : beforeMeta;
+  }
+
+  const [mainUrl, galleryHash] = cleanUrlForGallery.split("#gallery=");
+  const extras = galleryHash ? galleryHash.split("|").filter(Boolean) : [];
+  const allImages = [mainUrl, ...extras].filter(Boolean);
+
+  const parseNum = (val: any) => parseFloat(String(val || "0").replace(/[^0-9.]/g, "")) || 0;
+
+  const dbPriceNum = parseNum(rawProduct.price);
+  const origColNum = parseNum(rawProduct.original_price);
+
+  const realPriceNum = meta.realPrice
+    ? parseNum(meta.realPrice)
+    : origColNum > dbPriceNum
+    ? origColNum
+    : dbPriceNum;
+
+  const discountPriceNum = meta.discountPrice
+    ? parseNum(meta.discountPrice)
+    : origColNum > dbPriceNum
+    ? dbPriceNum
+    : 0;
+
+  const sellingPriceNum = discountPriceNum > 0 ? discountPriceNum : realPriceNum || dbPriceNum;
+  const hasDiscount = realPriceNum > sellingPriceNum && sellingPriceNum > 0;
+  const discountPercent = hasDiscount
+    ? Math.round(((realPriceNum - sellingPriceNum) / realPriceNum) * 100)
+    : 0;
+
+  // এডমিন প্যানেল থেকে অফার দিলে সেটি দেখাবে, নাহলে ডিসকাউন্ট পার্সেন্টেজ থাকলে সেটি দেখাবে (ভুয়া -40% আর দেখাবে না)
+  const offerText = meta.offer
+    ? meta.offer.trim()
+    : discountPercent > 0
+    ? `-${discountPercent}%`
+    : "";
+
+  const stockStatus = meta.stock || rawProduct.stock || "In Stock";
+  const isOutOfStock = stockStatus === "Out of Stock";
+
+  const finalCategory =
+    meta.category ||
+    rawProduct.category ||
+    detectAutoCategory(rawProduct.name || "");
+
+  return {
+    ...rawProduct,
+    image_url: allImages[0] || "https://via.placeholder.com/300",
+    images: allImages.length > 0 ? allImages : ["https://via.placeholder.com/300"],
+    price: String(sellingPriceNum),
+    sellingPrice: sellingPriceNum,
+    realPrice: realPriceNum,
+    discountPrice: discountPriceNum,
+    hasDiscount,
+    discountPercent,
+    offerBadge: offerText,
+    stock: stockStatus,
+    isOutOfStock,
+    category: finalCategory
+  };
+}
+
 export default function NexaStore() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [cart, setCart] = useState<any[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [settings, setSettings] = useState({ 
     store_name: 'NEXA',
+    hero_title: '',
+    hero_subtitle: '',
     hero_image: ''
   });
   const [loading, setLoading] = useState(true);
@@ -40,18 +156,18 @@ export default function NexaStore() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
 
-  // ☎️ ছবির মতো Customer Care Popup State
+  // ☎️ Customer Care Popup State
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
-  // 💸 আপনার বিকাশ ও নগদ নাম্বার (আগের মতোই আছে, কিছু বদলাইনি)
+  // 💸 আপনার বিকাশ ও নগদ নাম্বার
   const MERCHANT_NUMBER = "01935133944";
 
-  // ☎️ হেল্পলাইন / কাস্টমার কেয়ার — এখান থেকে সব জায়গায় নাম্বার যাবে
+  // ☎️ হেল্পলাইন / কাস্টমার কেয়ার
   const HELPLINE_NUMBER = "01935133944";
-  const WHATSAPP_NUMBER = "8801935133944"; // শুরুর 0 বাদ দিয়ে সামনে 880
-  const MESSENGER_LINK = "https://m.me/nexa"; // আপনার Facebook Page username বসান
-  const STORE_EMAIL = "support@nexa.com.bd"; // আপনার ইমেইল বসান
-  const STORE_ADDRESS = "ঢাকা, বাংলাদেশ"; // আপনার ঠিকানা বসান
+  const WHATSAPP_NUMBER = "8801935133944";
+  const MESSENGER_LINK = "https://m.me/nexa";
+  const STORE_EMAIL = "support@nexa.com.bd";
+  const STORE_ADDRESS = "ঢাকা, বাংলাদেশ";
   const whatsappUrl = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent("হ্যালো " + settings.store_name + ", আমার সাহায্য প্রয়োজন।");
 
   const copyNumber = () => {
@@ -74,7 +190,7 @@ export default function NexaStore() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 🧠 ১. SMART AUTO-BRAND DETECTOR (যেকোনো প্রোডাক্টের নাম বা ধরন দেখে নিজে থেকে ব্র্যান্ড বের করবে, কখনোই No Brand দেখাবে না)
+  // 🧠 ১. SMART AUTO-BRAND DETECTOR
   const getProductBrand = (product: any): string => {
     if (!product) return 'NEXA Official';
 
@@ -87,7 +203,6 @@ export default function NexaStore() {
     const compactTitle = title.replace(/[\s-_]/g, '');
 
     const brandRules: { keywords: string[]; brandName: string }[] = [
-      // গ্লোবাল মোবাইল ও টেক ব্র্যান্ড
       { keywords: ['iphone', 'ipad', 'macbook', 'airpod', 'apple', 'imac', 'iwatch'], brandName: 'Apple' },
       { keywords: ['samsung', 'galaxy'], brandName: 'Samsung' },
       { keywords: ['xiaomi', 'redmi', 'poco', 'miband', 'mijia'], brandName: 'Xiaomi' },
@@ -120,8 +235,6 @@ export default function NexaStore() {
       { keywords: ['colmi'], brandName: 'Colmi' },
       { keywords: ['t800', 't900', 'ultra watch', 'smartwatch'], brandName: 'Watch Ultra' },
       { keywords: ['m10', 'm19', 'tws', 'earbud', 'airdots'], brandName: 'SoundCore' },
-
-      // চায়না স্মার্ট গ্যাজেট ও এক্সেসরিজ ব্র্যান্ড (অটো ডিটেকশন)
       { keywords: ['k8', 'k9', 'k35', 'sx9', 'boya', 'ulanzi', 'lavalier', 'microphone', 'wireless mic'], brandName: 'BOYA / K9 Pro' },
       { keywords: ['massager', 'kneading', 'neck', 'shoulder', 'massage'], brandName: 'SKG Wellness' },
       { keywords: ['humidifier', 'diffuser', 'aroma', 'flame', 'rain cloud', 'mushroom lamp', 'air purifier'], brandName: 'Kinscoter' },
@@ -133,8 +246,6 @@ export default function NexaStore() {
       { keywords: ['portable speaker', 'bluetooth speaker', 'rgb speaker', 'bass boost', 'wireless speaker'], brandName: 'Awei Audio' },
       { keywords: ['power bank', 'powerbank', '20000mah', '10000mah'], brandName: 'Baseus' },
       { keywords: ['sandisk', 'memory card', 'pendrive', 'sd card'], brandName: 'SanDisk' },
-
-      // কম্পিউটার, ঘড়ি, ফ্যাশন ও লাইফস্টাইল ব্র্যান্ড
       { keywords: ['lenovo', 'thinkpad', 'ideapad'], brandName: 'Lenovo' },
       { keywords: ['asus', 'rog', 'zenbook', 'vivobook'], brandName: 'ASUS' },
       { keywords: ['dell', 'inspiron', 'alienware'], brandName: 'Dell' },
@@ -197,7 +308,6 @@ export default function NexaStore() {
       }
     }
 
-    // প্রোডাক্টের নামের ভেতর থেকে স্মার্টলি ব্র্যান্ড নাম খুঁজে বের করা (যদি লিস্টের বাইরে কোনো নতুন প্রোডাক্ট হয়)
     const genericWords = new Set([
       'smart', 'mini', 'super', 'cute', 'high', 'speed', 'high-speed', '3d', '6d', '4d', 'new', 'best',
       'premium', 'original', 'portable', 'wireless', 'electric', 'digital', 'led', 'rgb', 'bass', 'boost',
@@ -213,17 +323,16 @@ export default function NexaStore() {
       }
     }
 
-    // ক্যাটাগরি অনুযায়ী স্মার্ট ডিফল্ট ব্র্যান্ড
-    if (category.includes('elect') || category.includes('gadget') || category.includes('mobile')) return 'Baseus Tech';
+    if (category.includes('gadget') || category.includes('elect') || category.includes('phone')) return 'Baseus Tech';
     if (category.includes('fash') || category.includes('cloth')) return 'Zara Fashion';
-    if (category.includes('home') || category.includes('decor')) return 'HomeLux';
-    if (category.includes('health') || category.includes('care')) return 'SKG Care';
-    if (category.includes('sport')) return 'ProSports';
+    if (category.includes('home') || category.includes('kitchen')) return 'HomeLux';
+    if (category.includes('health') || category.includes('beauty')) return 'SKG Care';
+    if (category.includes('watch')) return 'Watch Ultra';
 
     return `${settings.store_name || 'NEXA'} Official`;
   };
 
-  // 🌟 ২. SMART DYNAMIC RATING, SOLD & MULTI-REVIEW GENERATOR (প্রতিটি প্রোডাক্টে আলাদা রিভিউ ও সোল্ড দেখাবে)
+  // 🌟 ২. SMART DYNAMIC RATING, SOLD & MULTI-REVIEW GENERATOR
   const getProductSocialProof = (product: any) => {
     if (!product) {
       return {
@@ -234,25 +343,18 @@ export default function NexaStore() {
       };
     }
 
-    // প্রোডাক্টের নাম এবং আইডি দিয়ে একটি ইউনিক নাম্বার (Seed) তৈরি করা
     const str = `${product.id || ''}_${product.name || 'nexa'}`;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       hash = (hash * 31 + str.charCodeAt(i)) % 100000;
     }
 
-    // আলাদা আলাদা রেটিং স্কোর (4.7, 4.8, 4.9, 5.0)
     const possibleScores = ['4.8', '4.9', '4.7', '5.0', '4.9', '4.8'];
     const ratingScore = possibleScores[hash % possibleScores.length];
-
-    // আলাদা আলাদা রেটিং সংখ্যা (যেমন: 47 থেকে 390 এর মধ্যে)
     const ratingCount = 45 + (hash % 340);
-
-    // আলাদা আলাদা সোল্ড সংখ্যা (রেটিং সংখ্যার চেয়ে ২-৩ গুণ বেশি, যাতে ১০০% বাস্তব মনে হয়)
     const soldMultiplier = 2 + (hash % 2);
     const soldCount = ratingCount * soldMultiplier + (hash % 45);
 
-    // ২৪টি বাস্তবসম্মত বাংলাদেশি কাস্টমার রিভিউ পুল
     const allReviewsPool = [
       { name: 'তানভীর আহমেদ', date: '২ দিন আগে', stars: 5, text: 'আলহামদুলিল্লাহ, ছবির সাথে ১০০% মিল আছে। ডেলিভারি খুব দ্রুত পেয়েছি এবং প্যাকেজিং দারুণ ছিল।' },
       { name: 'সাদিয়া ইসলাম', date: '৪ দিন আগে', stars: 5, text: 'প্রোডাক্টের কোয়ালিটি দামের তুলনায় অনেক ভালো। হাতে পেয়ে চেক করে টাকা দিয়েছি, ধন্যবাদ!' },
@@ -266,19 +368,12 @@ export default function NexaStore() {
       { name: 'রাশেদুল করিম', date: '৪ দিন আগে', stars: 4, text: 'খুবই ভালো সার্ভিস। অর্ডার করার পরের দিনই হাতে পেয়েছি। কোয়ালিটি একদম পারফেক্ট।' },
       { name: 'সাব্বির হোসেন', date: '১ সপ্তাহ আগে', stars: 5, text: 'এক কথায় অস্থির প্রোডাক্ট! ডেলিভারির সময় খুলে চেক করে নেওয়ার সুবিধা থাকায় কোনো টেনশন ছিল না।' },
       { name: 'জান্নাতুল ফেরদৌস', date: '৩ দিন আগে', stars: 5, text: 'ছবিতে যেমন দেখেছি বাস্তবে তার চেয়েও বেশি সুন্দর। ফিনিশিং এবং কোয়ালিটি ১০ এ ১০!' },
-      { name: 'শাকিল মাহমুদ', date: '৫ দিন আগে', stars: 5, text: 'আমি গত ১ সপ্তাহ ধরে ব্যবহার করছি, দারুণ কাজ করছে। এই বাজেটে সেরা ডিল বলা যায়।' },
-      { name: 'নাজমুল হুদা', date: '২ দিন আগে', stars: 5, text: 'সেলার ভাই খুব দ্রুত রেসপন্স করেন। প্রোডাক্ট হাতে পেয়ে শতভাগ সন্তুষ্ট আমি।' },
-      { name: 'রুবাইয়া তাবাসসুম', date: '৬ দিন আগে', stars: 4, text: 'প্রোডাক্টটি বেশ ভালো এবং দেখতে একদম ব্র্যান্ড নিউ। ডেলিভারি আরেকটু ফাস্ট হলে আরও ভালো হতো, তবে জিনিস খুব ভালো।' },
-      { name: 'ইমরান হোসেন সাগর', date: '১ দিন আগে', stars: 5, text: 'এত কম দামে অরিজিনাল প্রোডাক্ট দেওয়ার জন্য ধন্যবাদ। বন্ধুদেরও সাজেস্ট করেছি আপনাদের শপের কথা।' },
-      { name: 'কাজী ফাহিম', date: '৪ দিন আগে', stars: 5, text: 'প্রিমিয়াম কোয়ালিটি, হাতে নিলেই বোঝা যায় জিনিসটা কতটা ভালো। চোখ বন্ধ করে অর্ডার করতে পারেন।' },
-      { name: 'শারমিন আক্তার নিপা', date: '১ সপ্তাহ আগে', stars: 5, text: 'অনলাইনে কেনাকাটায় মাঝে মাঝে ঠকতে হয়, কিন্তু এখান থেকে প্রোডাক্ট নিয়ে দারুণ অভিজ্ঞতা হলো। ১০০% রিকমেন্ডেড!' }
     ];
 
-    // এই প্রোডাক্টের জন্য ইউনিক ৩টি রিভিউ সিলেক্ট করা (যাতে এক প্রোডাক্টের সাথে অন্য প্রোডাক্টের রিভিউ না মেলে)
     const totalReviews = allReviewsPool.length;
     const idx1 = hash % totalReviews;
-    const idx2 = (hash + 5) % totalReviews;
-    const idx3 = (hash + 11) % totalReviews;
+    const idx2 = (hash + 3) % totalReviews;
+    const idx3 = (hash + 7) % totalReviews;
 
     return {
       ratingScore,
@@ -288,126 +383,35 @@ export default function NexaStore() {
     };
   };
 
-  // 🖼️ প্রোডাক্টের ১ম মেইন ছবি বের করার ফাংশন (যদি image_url এ একাধিক ছবি থাকে তবুও সঠিক থাকবে)
-  const getPrimaryImage = (product: any): string => {
-    if (!product) return '';
-    const raw = product.image_url;
-    if (!raw) return '';
-    if (typeof raw === 'string') {
-      const trimmed = raw.trim();
-      if (trimmed.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (Array.isArray(parsed) && parsed[0]) return parsed[0];
-        } catch {}
-      }
-      if (trimmed.includes('|')) return trimmed.split('|')[0].trim();
-      if (trimmed.includes('\n')) return trimmed.split('\n')[0].trim();
-    }
-    return raw;
-  };
-
-  // 🖼️ প্রোডাক্টের ৪টি আলাদা ছবির গ্যালারি তৈরি করার ফাংশন (জুম ইন/আউট ছাড়া আসল ৪টি ছবি দেখাবে)
+  // 🖼️ প্রোডাক্টের ৪টি আলাদা ছবির গ্যালারি বের করার ফাংশন
   const getProductGallery = (product: any) => {
     if (!product) return [];
-
-    let collectedUrls: string[] = [];
-
-    // ১. যদি images বা gallery কলামে অ্যারে বা JSON আকারে ৪টি ছবি থাকে
-    const arrayCandidates = [product.images, product.gallery, product.image_urls, product.extra_images];
-    for (const candidate of arrayCandidates) {
-      if (Array.isArray(candidate) && candidate.length > 0) {
-        collectedUrls.push(...candidate.filter(Boolean));
-      } else if (typeof candidate === 'string' && candidate.trim() !== '') {
-        const str = candidate.trim();
-        if (str.startsWith('[')) {
-          try {
-            const parsed = JSON.parse(str);
-            if (Array.isArray(parsed)) collectedUrls.push(...parsed.filter(Boolean));
-          } catch {}
-        } else if (str.includes('|') || str.includes(',') || str.includes('\n')) {
-          collectedUrls.push(...str.split(/[|\n,]+/).map((s: string) => s.trim()).filter(Boolean));
-        }
-      }
-    }
-
-    // ২. যদি image_url এর ভেতরে একাধিক ছবির লিংক থাকে
-    if (typeof product.image_url === 'string' && product.image_url.trim() !== '') {
-      const rawMain = product.image_url.trim();
-      if (rawMain.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(rawMain);
-          if (Array.isArray(parsed)) collectedUrls.push(...parsed.filter(Boolean));
-        } catch {}
-      } else if (rawMain.includes('|') || rawMain.includes('\n')) {
-        collectedUrls.push(...rawMain.split(/[|\n]+/).map((s: string) => s.trim()).filter(Boolean));
-      } else if (rawMain.includes(',http')) {
-        collectedUrls.push(...rawMain.split(/,(?=https?:\/\/)/).map((s: string) => s.trim()).filter(Boolean));
-      } else {
-        collectedUrls.push(rawMain);
-      }
-    }
-
-    // ৩. আলাদা আলাদা কলামে থাকলে (image_url_2, image2, img2 ইত্যাদি)
-    const separateFields = [
-      product.image_url_1 || product.image1 || product.img1,
-      product.image_url_2 || product.image2 || product.img2,
-      product.image_url_3 || product.image3 || product.img3,
-      product.image_url_4 || product.image4 || product.img4,
-    ].filter(Boolean);
-
-    collectedUrls.push(...separateFields);
-
-    // ডুপ্লিকেট বাদ দিয়ে ৪টি ছবি নেওয়া
-    const uniqueUrls = Array.from(new Set(collectedUrls.filter(Boolean))).slice(0, 4);
-
-    if (uniqueUrls.length > 0) {
-      return uniqueUrls.map((url) => ({
-        url,
-        imgClass: 'scale-100 object-center'
-      }));
-    }
-
-    const mainImg = getPrimaryImage(product);
-    return [{ url: mainImg, imgClass: 'scale-100 object-center' }];
+    const normalized = normalizeAdminProduct(product);
+    const urls: string[] = normalized?.images || [];
+    return urls.slice(0, 4).map((url) => ({
+      url,
+      imgClass: 'scale-100 object-center'
+    }));
   };
 
-  // 💰 দাম ও কাটা দাম (Original Price) বের করার ফাংশন
-  const getCleanPrice = (val: any) => Number(val?.toString().replace(/[^0-9]/g, '')) || 0;
-  const getOriginalPrice = (product: any) => {
-    const current = getCleanPrice(product?.price);
-    const orig = getCleanPrice(product?.original_price);
-    if (orig > current) return orig;
-    return Math.round(current * 1.45);
-  };
+  const getCleanPrice = (val: any) => Number(val?.toString().replace(/[^0-9.]/g, '')) || 0;
 
-  // ব্যাকআপ প্রোডাক্ট তালিকা (ক্যাটাগরিসহ নিখুঁত ম্যাপিং)
+  // ব্যাকআপ প্রোডাক্ট তালিকা (যদি ডাটাবেস খালি থাকে)
   const defaultProducts = [
-    { id: 1, name: 'iPhone 13 Pro Max - 128GB Flagship Phone', category: 'Electronics', price: '70000', original_price: '115000', discount: '-40%', rating: '5.0 (1.2k)', image_url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80' },
-    { id: 2, name: 'T800 Ultra Smartwatch with Bluetooth Calling', category: 'Electronics', price: '500', original_price: '1200', discount: '-58%', rating: '4.8 (2.4k)', image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80' },
-    { id: 3, name: 'M10 TWS Wireless Earbuds Deep Bass Bluetooth 5.1', category: 'Electronics', price: '380', original_price: '750', discount: '-49%', rating: '4.7 (3.5k)', image_url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&q=80' },
-    { id: 4, name: 'Men Loose Cargo Denim Jeans Pants Streetwear', category: 'Fashion & Beauty', price: '899', original_price: '1599', discount: '-45%', rating: '4.6 (950)', image_url: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400&q=80' },
-    { id: 5, name: 'Airtight Food Storage Container Bowl Set', category: 'Home & Living', price: '299', original_price: '499', discount: '-40%', rating: '4.6 (820)', image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80' },
-    { id: 6, name: 'Premium Heavy Duty Hand Gripper Muscle Exerciser', category: 'Sports & Outdoors', price: '450', original_price: '750', discount: '-40%', rating: '4.7 (1.5k)', image_url: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=400&q=80' },
-    { id: 7, name: 'Fast Charging 20000mAh Power Bank Digital LED', category: 'Electronics', price: '1250', original_price: '2200', discount: '-43%', rating: '4.9 (840)', image_url: 'https://images.unsplash.com/photo-1609592426868-07e1124ef547?w=400&q=80' },
-    { id: 8, name: 'Facial Roller & Skincare Serum Glow Set', category: 'Health & Care', price: '1299', original_price: '3299', discount: '-60%', rating: '4.8 (620)', image_url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400&q=80' },
+    { id: 1, name: 'iPhone 13 Pro Max - 128GB Flagship Phone', category: 'Phones & Accessories', price: '70000', original_price: '85000', image_url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80' },
+    { id: 2, name: 'T800 Ultra Smartwatch with Bluetooth Calling', category: 'Watches & Jewelry', price: '550', original_price: '950', image_url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80' },
+    { id: 3, name: 'M10 TWS Wireless Earbuds Deep Bass Bluetooth 5.1', category: 'Gadgets & Electronics', price: '380', original_price: '650', image_url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&q=80' },
+    { id: 4, name: '5-in-1 Hand-Kneading Neck & Shoulder Massager', category: 'Health & Beauty', price: '2240', original_price: '2800', image_url: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=400&q=80' },
   ];
 
   useEffect(() => {
     async function fetchData() {
       const { data: pData } = await supabase.from('products').select('*').order('id', { ascending: false });
       if (pData && pData.length > 0) {
-        const normalized = pData.map((item: any) => {
-          const gallery = getProductGallery(item).map((g) => g.url);
-          return {
-            ...item,
-            image_url: gallery[0] || item.image_url,
-            images: gallery
-          };
-        });
+        const normalized = pData.map((item: any) => normalizeAdminProduct(item)).filter(Boolean);
         setProducts(normalized);
       } else {
-        setProducts(defaultProducts);
+        setProducts(defaultProducts.map((item) => normalizeAdminProduct(item)));
       }
 
       const { data: sData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
@@ -418,22 +422,24 @@ export default function NexaStore() {
     fetchData();
   }, []);
 
-  // 🔍 স্মার্ট ফিল্টারিং লজিক
+  // 🔍 স্মার্ট ফিল্টারিং লজিক (সার্চ এবং ক্যাটাগরি দুইটাই ১০০% কাজ করবে)
   const filteredProducts = products.filter((item) => {
+    const itemCat = (item.category || '').toLowerCase();
+    const selCat = selectedCategory.toLowerCase();
+
+    // ১. ক্যাটাগরি ফিল্টার
+    if (selectedCategory !== 'All') {
+      if (itemCat !== selCat && !itemCat.includes(selCat)) {
+        return false;
+      }
+    }
+
+    // ২. সার্চ ফিল্টার
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     const name = (item.name || '').toLowerCase();
-    const cat = (item.category || '').toLowerCase();
 
-    if (name.includes(q) || cat.includes(q)) return true;
-
-    if (q.includes('elect') && (name.includes('phone') || name.includes('watch') || name.includes('earbud') || name.includes('bank') || cat.includes('elect'))) return true;
-    if (q.includes('fash') && (name.includes('jean') || name.includes('pant') || name.includes('shirt') || cat.includes('fash'))) return true;
-    if (q.includes('home') && (name.includes('bowl') || name.includes('container') || cat.includes('home'))) return true;
-    if (q.includes('health') && (name.includes('serum') || name.includes('roller') || cat.includes('health'))) return true;
-    if (q.includes('sport') && (name.includes('gripper') || name.includes('gym') || cat.includes('sport'))) return true;
-
-    return false;
+    return name.includes(q) || itemCat.includes(q);
   });
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -442,9 +448,20 @@ export default function NexaStore() {
     setTimeout(() => scrollToProducts(), 100);
   };
 
-  // কার্ট লজিক
+  const handleSelectCategory = (catName: string) => {
+    setSelectedCategory(catName);
+    setSearchQuery('');
+    setViewingProduct(null);
+    setTimeout(() => scrollToProducts(), 100);
+  };
+
+  // কার্ট লজিক (Out of Stock হলে আটকানো)
   const addToCart = (product: any, e?: React.MouseEvent, customQty: number = 1) => {
     if (e) e.stopPropagation();
+    if (product?.isOutOfStock) {
+      alert("দুঃখিত! এই প্রোডাক্টটি বর্তমানে Out of Stock (স্টক শেষ)।");
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
@@ -470,13 +487,17 @@ export default function NexaStore() {
   };
 
   const cartTotal = cart.reduce((sum, item) => {
-    const p = Number(item.price.toString().replace(/[^0-9]/g, '')) || 0;
+    const p = getCleanPrice(item.sellingPrice || item.price);
     return sum + (p * item.qty);
   }, 0);
 
-  // চেকআউট লজিক
+  // চেকআউট লজিক (Out of Stock হলে আটকানো)
   const openCheckout = (product: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (product?.isOutOfStock) {
+      alert("দুঃখিত! এই প্রোডাক্টটি বর্তমানে Out of Stock (স্টক শেষ)।");
+      return;
+    }
     setSelectedProduct(product);
     setPaymentMethod('cod');
     setTrxId('');
@@ -522,7 +543,7 @@ export default function NexaStore() {
       : cart.map(c => `${c.name} (${c.qty}x)`).join(', ');
 
     const rawCleanPrice = selectedProduct 
-      ? String(selectedProduct.price).replace(/[^0-9.]/g, '')
+      ? String(getCleanPrice(selectedProduct.sellingPrice || selectedProduct.price))
       : String(cartTotal);
 
     const paymentNote = paymentMethod === 'cod'
@@ -535,7 +556,7 @@ export default function NexaStore() {
         customer_phone: cleanedPhone,
         customer_address: `${formData.address.trim()} | পেমেন্ট: ${paymentNote}`,
         product_name: orderItemName,
-        price: rawCleanPrice,
+        price: `৳${rawCleanPrice}`,
         status: 'Pending'
       }
     ]);
@@ -562,39 +583,152 @@ export default function NexaStore() {
   };
 
   const payableAmount = selectedProduct 
-    ? selectedProduct.price?.toString().replace(/[^0-9]/g, '') 
+    ? getCleanPrice(selectedProduct.sellingPrice || selectedProduct.price)
     : cartTotal;
 
+  // 📂 এডমিন প্যানেলের সাথে ১০০% মিল রেখে সব ক্যাটাগরি (Gadgets & Electronics সবার উপরে!)
   const sidebarCategories = [
-    { name: "Electronics", query: "Electronics", icon: <Smartphone size={14} className="text-amber-400" /> },
-    { name: "Fashion & Beauty", query: "Fashion", icon: <Shirt size={14} className="text-amber-400" /> },
-    { name: "Home & Living", query: "Home", icon: <HomeIcon size={14} className="text-amber-400" /> },
-    { name: "Health & Care", query: "Health", icon: <Heart size={14} className="text-amber-400" /> },
-    { name: "Sports & Outdoors", query: "Sports", icon: <Trophy size={14} className="text-amber-400" /> },
-    { name: "Toys & Games", query: "Toys", icon: <Gamepad2 size={14} className="text-amber-400" /> },
-    { name: "Groceries", query: "Groceries", icon: <ShoppingBag size={14} className="text-amber-400" /> },
-    { name: "More Categories", query: "", icon: <LayoutGrid size={14} className="text-amber-400" /> },
+    { name: "Gadgets & Electronics", cat: "Gadgets & Electronics", icon: <Cpu size={14} className="text-amber-400" /> },
+    { name: "Phones & Accessories", cat: "Phones & Accessories", icon: <Smartphone size={14} className="text-amber-400" /> },
+    { name: "Watches & Jewelry", cat: "Watches & Jewelry", icon: <Watch size={14} className="text-amber-400" /> },
+    { name: "Health & Beauty", cat: "Health & Beauty", icon: <Heart size={14} className="text-amber-400" /> },
+    { name: "Fashion & Lifestyle", cat: "Fashion & Lifestyle", icon: <Shirt size={14} className="text-amber-400" /> },
+    { name: "Home & Kitchen", cat: "Home & Kitchen", icon: <HomeIcon size={14} className="text-amber-400" /> },
+    { name: "Baby & Kids", cat: "Baby & Kids", icon: <Gamepad2 size={14} className="text-amber-400" /> },
+    { name: "All Categories", cat: "All", icon: <LayoutGrid size={14} className="text-amber-400" /> },
   ];
 
   const visualCategories = [
-    { name: "Electronics", query: "Electronics", img: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=150&q=80" },
-    { name: "Fashion & Beauty", query: "Fashion", img: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=150&q=80" },
-    { name: "Home & Living", query: "Home", img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=150&q=80" },
-    { name: "Health & Care", query: "Health", img: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=150&q=80" },
-    { name: "Sports & Outdoors", query: "Sports", img: "https://images.unsplash.com/photo-1517649763962-0c623266ddc0?w=150&q=80" },
-    { name: "Toys & Games", query: "Toys", img: "https://images.unsplash.com/photo-1558060370-d644479cb6f7?w=150&q=80" },
-    { name: "Groceries", query: "Groceries", img: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=150&q=80" },
-    { name: "More Categories", query: "", img: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=150&q=80" },
+    { name: "Gadgets & Electronics", cat: "Gadgets & Electronics", img: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=150&q=80" },
+    { name: "Phones & Accessories", cat: "Phones & Accessories", img: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=150&q=80" },
+    { name: "Watches & Jewelry", cat: "Watches & Jewelry", img: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=150&q=80" },
+    { name: "Health & Beauty", cat: "Health & Beauty", img: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=150&q=80" },
+    { name: "Fashion & Lifestyle", cat: "Fashion & Lifestyle", img: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=150&q=80" },
+    { name: "Home & Kitchen", cat: "Home & Kitchen", img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=150&q=80" },
+    { name: "Baby & Kids", cat: "Baby & Kids", img: "https://images.unsplash.com/photo-1558060370-d644479cb6f7?w=150&q=80" },
+    { name: "All Products", cat: "All", img: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=150&q=80" },
+  ];
+
+  // ডাটাবেসে থাকা সবগুলো ক্যাটাগরির ডাইনামিক ট্যাব (যাতে কাস্টম ক্যাটাগরি দিলেও অটো চলে আসে)
+  const dynamicCategoryTabs = [
+    "All",
+    ...Array.from(
+      new Set([
+        "Gadgets & Electronics",
+        "Phones & Accessories",
+        "Watches & Jewelry",
+        "Health & Beauty",
+        "Fashion & Lifestyle",
+        "Home & Kitchen",
+        ...products.map((p) => p.category).filter(Boolean)
+      ])
+    )
   ];
 
   const galleryImages = getProductGallery(viewingProduct);
   const detectedBrand = getProductBrand(viewingProduct);
   const socialProof = getProductSocialProof(viewingProduct);
 
+  // প্রোডাক্ট কার্ড রেন্ডার করার কমন ফাংশন (যাতে সব জায়গায় Real Price, Discount Price, Offer এবং Out of Stock নিখুঁত দেখায়)
+  const renderProductCard = (item: any) => {
+    const itemProof = getProductSocialProof(item);
+    const isOut = item.isOutOfStock;
+
+    return (
+      <div 
+        key={item.id} 
+        onClick={() => openProductDetails(item)}
+        className={`bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border ${
+          isOut ? 'border-red-500/30 opacity-85' : 'border-amber-500/20 hover:border-amber-400'
+        } group cursor-pointer`}
+      >
+        <div>
+          <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
+            <img 
+              src={item.image_url} 
+              alt={item.name} 
+              className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 ${isOut ? 'grayscale-[40%]' : ''}`}
+            />
+
+            {/* 🔥 এডমিন প্যানেলের আসল Offer Badge অথবা সঠিক % ডিসকাউন্ট (ভুয়া -40% আর আসবে না!) */}
+            {item.offerBadge && (
+              <span className="absolute top-1.5 right-1.5 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                {item.offerBadge}
+              </span>
+            )}
+
+            {/* 📦 In Stock / Out of Stock ব্যাজ */}
+            <span
+              className={`absolute bottom-1.5 left-1.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded backdrop-blur-xs border ${
+                isOut
+                  ? 'bg-red-950/90 text-red-300 border-red-500/50'
+                  : 'bg-emerald-950/85 text-emerald-300 border-emerald-500/40'
+              }`}
+            >
+              {isOut ? '❌ Out of Stock' : '✓ In Stock'}
+            </span>
+          </div>
+
+          {/* ক্যাটাগরি ট্যাগ */}
+          <span className="text-[9px] text-amber-400/80 font-semibold block truncate mb-0.5">
+            {item.category}
+          </span>
+
+          <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
+            {item.name}
+          </h4>
+
+          {/* 💰 এডমিন প্যানেলের আসল দাম (Real Price) ও ছাড়ের দাম (Discount Price) */}
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-amber-400 font-black text-sm">
+              ৳{item.sellingPrice}
+            </span>
+            {item.hasDiscount && (
+              <span className="text-gray-500 line-through text-[10px] font-semibold">
+                ৳{item.realPrice}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
+            <Star size={10} fill="currentColor" />
+            <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
+          </div>
+        </div>
+
+        {isOut ? (
+          <button
+            type="button"
+            disabled
+            onClick={(e) => e.stopPropagation()}
+            className="w-full bg-red-950/50 border border-red-500/40 text-red-400 text-[11px] font-extrabold py-1.5 rounded-lg flex items-center justify-center gap-1 cursor-not-allowed"
+          >
+            <Ban size={12} /> Out of Stock
+          </button>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
+            <button 
+              onClick={(e) => addToCart(item, e)}
+              className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <ShoppingCart size={11} /> Cart
+            </button>
+            <button 
+              onClick={(e) => openCheckout(item, e)}
+              className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
+            >
+              Buy Now
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#080808] text-white font-sans selection:bg-amber-500 selection:text-black pb-24">
 
-      {/* 🖼️ FULL SCREEN IMAGE LIGHTBOX (ছবির ওপর ক্লিক করলে বড় করে দেখার পপআপ) */}
+      {/* 🖼️ FULL SCREEN IMAGE LIGHTBOX */}
       {isImageZoomOpen && viewingProduct && (
         <div 
           onClick={() => setIsImageZoomOpen(false)}
@@ -654,7 +788,7 @@ export default function NexaStore() {
                       <img src={item.image_url} alt={item.name} className="w-12 h-12 rounded object-cover" />
                       <div className="flex-1">
                         <h4 className="text-xs font-semibold text-gray-200 line-clamp-1">{item.name}</h4>
-                        <p className="text-xs font-black text-amber-400">৳{item.price}</p>
+                        <p className="text-xs font-black text-amber-400">৳{item.sellingPrice || item.price}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <button onClick={() => updateCartQty(item.id, -1)} className="w-5 h-5 bg-[#251e15] rounded border border-amber-500/30 flex items-center justify-center text-xs font-bold text-gray-300">-</button>
                           <span className="text-xs font-bold">{item.qty}</span>
@@ -929,10 +1063,10 @@ export default function NexaStore() {
         <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-1.5 flex justify-between items-center gap-2">
           <div className="flex items-center gap-4 shrink-0">
             <span className="flex items-center gap-1 text-amber-400 font-bold whitespace-nowrap">
-              👑 Welcome to Nexa!
+              👑 Welcome to {settings.store_name || 'Nexa'}!
             </span>
             <span className="hidden md:flex items-center gap-1 text-gray-400 whitespace-nowrap">
-              <Truck size={12} className="text-amber-400" /> Free Delivery All Over Bangladesh
+              <Truck size={12} className="text-amber-400" /> {settings.hero_subtitle || "Fast Home Delivery All Over Bangladesh"}
             </span>
           </div>
           <div className="flex items-center gap-3 md:gap-4 whitespace-nowrap">
@@ -947,7 +1081,7 @@ export default function NexaStore() {
       {/* 👑 2. MAIN HEADER */}
       <header className="bg-[#0c0a07] border-b border-amber-500/20 sticky top-0 z-50 shadow-md">
         <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-2.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5 md:gap-4">
-          <div className="flex items-center gap-2 cursor-pointer order-1" onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToTop(); }}>
+          <div className="flex items-center gap-2 cursor-pointer order-1" onClick={() => { setViewingProduct(null); setSelectedCategory('All'); setSearchQuery(''); scrollToTop(); }}>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-200 rotate-45 flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.5)]">
               <span className="-rotate-45 font-black text-black text-xs">N</span>
             </div>
@@ -967,7 +1101,7 @@ export default function NexaStore() {
               type="text" 
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); if (viewingProduct) setViewingProduct(null); }}
-              placeholder={`Search in ${settings.store_name}... (e.g. iPhone, Watch, Pant)`} 
+              placeholder={`Search in ${settings.store_name}... (e.g. Gadgets, iPhone, Massager, Watch)`} 
               className="w-full bg-[#18140f] text-white rounded-full pl-4 sm:pl-5 pr-16 sm:pr-20 py-2.5 md:py-2 text-xs md:text-sm outline-none border border-amber-500/30 focus:border-amber-400 transition placeholder-gray-500"
             />
             {searchQuery && (
@@ -1006,7 +1140,7 @@ export default function NexaStore() {
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-gray-400 truncate">
               <span>Home</span>
               <ChevronRight size={12} />
-              <span>{viewingProduct.category || 'Official Store'}</span>
+              <span>{viewingProduct.category || 'Gadgets & Electronics'}</span>
               <ChevronRight size={12} />
               <span className="text-amber-400 font-semibold">{detectedBrand}</span>
               <ChevronRight size={12} />
@@ -1037,12 +1171,11 @@ export default function NexaStore() {
             </div>
           </div>
 
-          {/* MAIN DARAZ PRODUCT CARD (3-Column Desktop / Sleek App Stack on Mobile) */}
+          {/* MAIN DARAZ PRODUCT CARD */}
           <div className="bg-[#110e09] border border-amber-500/25 rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-12">
             
-            {/* 1. LEFT COLUMN: 4-PHOTO GALLERY (একদম দারাজের মতো পরিষ্কার গ্যালারি) */}
+            {/* 1. LEFT COLUMN: 4-PHOTO GALLERY */}
             <div className="lg:col-span-4 p-3 sm:p-5 bg-[#0e0b07] border-b lg:border-b-0 lg:border-r border-amber-500/15">
-              {/* বড় মেইন ছবি */}
               <div 
                 onClick={() => setIsImageZoomOpen(true)}
                 className="relative w-full aspect-square bg-[#17130d] rounded-xl overflow-hidden border border-amber-500/20 flex items-center justify-center cursor-zoom-in"
@@ -1053,35 +1186,37 @@ export default function NexaStore() {
                   className={`w-full h-full object-cover transition-transform duration-300 ${galleryImages[activeImageIdx]?.imgClass || ''}`}
                 />
 
-                {/* বাম-ডান ছবি পাল্টানোর বাটন */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveImageIdx((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1));
-                  }}
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-amber-400 text-white hover:text-black flex items-center justify-center transition cursor-pointer shadow"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveImageIdx((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1));
-                  }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-amber-400 text-white hover:text-black flex items-center justify-center transition cursor-pointer shadow"
-                >
-                  <ChevronRight size={18} />
-                </button>
+                {galleryImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveImageIdx((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1));
+                      }}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-amber-400 text-white hover:text-black flex items-center justify-center transition cursor-pointer shadow"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveImageIdx((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1));
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-amber-400 text-white hover:text-black flex items-center justify-center transition cursor-pointer shadow"
+                    >
+                      <ChevronRight size={18} />
+                    </button>
+                  </>
+                )}
 
-                {/* Daraz Style 1/4 Counter Pill */}
                 <div className="absolute bottom-3 right-3 bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/15">
                   {activeImageIdx + 1}/{galleryImages.length}
                 </div>
               </div>
 
-              {/* নিচে ৪টি থাম্বনেইল ছবি (Click to switch image) */}
+              {/* নিচে ৪টি থাম্বনেইল ছবি */}
               <div className="grid grid-cols-4 gap-2.5 mt-3">
                 {galleryImages.map((imgObj: (typeof galleryImages)[number], idx: number) => (
                   <button
@@ -1104,33 +1239,41 @@ export default function NexaStore() {
               </div>
             </div>
 
-            {/* 2. MIDDLE COLUMN: DARAZ FLASH BANNER, TITLE, DYNAMIC RATINGS, QTY & ACTIONS */}
+            {/* 2. MIDDLE COLUMN: PRICE, STOCK STATUS, TITLE & ACTIONS */}
             <div className="lg:col-span-5 p-3.5 sm:p-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-amber-500/15">
               <div>
-                {/* ⚡ DARAZ STYLE FLASH DEAL PRICE BANNER */}
+                {/* ⚡ FLASH DEAL PRICE BANNER (এডমিন প্যানেলের আসল দাম, ডিসকাউন্ট দাম ও স্টক স্ট্যাটাস) */}
                 <div className="bg-gradient-to-r from-[#261a07] via-[#1c1306] to-[#140e05] border border-amber-500/40 rounded-xl p-3 mb-3.5 shadow-inner">
                   <div className="flex items-center justify-between mb-1">
                     <span className="inline-flex items-center gap-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                      <Zap size={11} fill="currentColor" /> Flash Deal
+                      <Zap size={11} fill="currentColor" /> {viewingProduct.offerBadge || 'Special Price'}
                     </span>
-                    <span className="text-[11px] text-amber-300 font-bold">
-                      ✓ Cash on Delivery Available
+                    <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded ${
+                      viewingProduct.isOutOfStock
+                        ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    }`}>
+                      {viewingProduct.isOutOfStock ? '❌ Out of Stock (স্টক শেষ)' : '✓ In Stock (স্টকে আছে)'}
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-2.5 mt-1">
+                  <div className="flex items-baseline gap-2.5 mt-1 flex-wrap">
                     <span className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight">
-                      ৳{getCleanPrice(viewingProduct.price) * detailQty}
+                      ৳{viewingProduct.sellingPrice * detailQty}
                     </span>
-                    <span className="text-sm sm:text-base text-gray-400 line-through font-bold">
-                      ৳{getOriginalPrice(viewingProduct) * detailQty}
-                    </span>
-                    <span className="bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded">
-                      {viewingProduct.discount || '-40%'}
-                    </span>
+                    {viewingProduct.hasDiscount && (
+                      <span className="text-sm sm:text-base text-gray-400 line-through font-bold">
+                        ৳{viewingProduct.realPrice * detailQty}
+                      </span>
+                    )}
+                    {viewingProduct.offerBadge && (
+                      <span className="bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded">
+                        {viewingProduct.offerBadge}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* 🏷️ DARAZ MALL INLINE BADGE + PRODUCT TITLE */}
+                {/* 🏷️ PRODUCT TITLE */}
                 <div className="mb-2.5">
                   <h1 className="text-base sm:text-lg md:text-xl font-extrabold text-white leading-snug">
                     <span className="inline-block bg-gradient-to-r from-red-600 to-amber-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded mr-2 align-middle uppercase tracking-wider">
@@ -1140,7 +1283,7 @@ export default function NexaStore() {
                   </h1>
                 </div>
 
-                {/* ⭐ DYNAMIC RATING, SOLD & AUTO-BRAND ROW (প্রতিটি প্রোডাক্টে আলাদা সংখ্যা দেখাবে) */}
+                {/* ⭐ DYNAMIC RATING, SOLD & AUTO-BRAND ROW */}
                 <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-gray-300 pb-3 mb-3 border-b border-amber-500/15">
                   <div className="flex items-center gap-1">
                     <div className="flex items-center text-amber-400">
@@ -1161,25 +1304,33 @@ export default function NexaStore() {
                   </span>
                 </div>
 
-                {/* 🎁 VOUCHER / PROMO TAGS (Daraz Style) */}
+                {/* 🎁 VOUCHER / PROMO TAGS */}
                 <div className="flex flex-wrap items-center gap-2 mb-4">
-                  <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
-                    <Gift size={12} className="text-amber-400" /> Save ৳{(getOriginalPrice(viewingProduct) - getCleanPrice(viewingProduct.price)) * detailQty} Today
-                  </span>
+                  {viewingProduct.hasDiscount && (
+                    <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                      <Gift size={12} className="text-amber-400" /> Save ৳{(viewingProduct.realPrice - viewingProduct.sellingPrice) * detailQty} Today
+                    </span>
+                  )}
                   <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
                     <ShieldCheck size={12} className="text-emerald-400" /> 100% Authentic
                   </span>
                 </div>
 
-                {/* Brand & Category Spec Strip */}
-                <div className="grid grid-cols-2 gap-2 bg-[#16120c] border border-amber-500/15 rounded-xl p-2.5 mb-4 text-xs">
+                {/* Brand, Category & Stock Spec Strip */}
+                <div className="grid grid-cols-3 gap-2 bg-[#16120c] border border-amber-500/15 rounded-xl p-2.5 mb-4 text-xs">
                   <div>
                     <span className="text-gray-500 text-[10px] block">Brand</span>
-                    <span className="font-bold text-amber-400">{detectedBrand}</span>
+                    <span className="font-bold text-amber-400 truncate block">{detectedBrand}</span>
                   </div>
                   <div>
                     <span className="text-gray-500 text-[10px] block">Category</span>
-                    <span className="font-bold text-white">{viewingProduct.category || 'Official Collection'}</span>
+                    <span className="font-bold text-white truncate block">{viewingProduct.category}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 text-[10px] block">Availability</span>
+                    <span className={`font-bold ${viewingProduct.isOutOfStock ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {viewingProduct.stock}
+                    </span>
                   </div>
                 </div>
 
@@ -1207,30 +1358,41 @@ export default function NexaStore() {
               </div>
 
               {/* 🛒 ACTION BUTTONS */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {viewingProduct.isOutOfStock ? (
                 <button
-                  onClick={(e) => addToCart(viewingProduct, e, detailQty)}
-                  className="bg-[#1c1710] hover:bg-amber-500/15 border-2 border-amber-400 text-amber-400 font-extrabold py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                  type="button"
+                  disabled
+                  className="w-full bg-red-950/60 border-2 border-red-500/50 text-red-400 font-black py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed"
                 >
-                  <ShoppingCart size={16} /> Add to Cart
+                  <Ban size={18} /> Out of Stock (বর্তমানে স্টক শেষ)
                 </button>
-                <button
-                  onClick={() => {
-                    const unitPrice = getCleanPrice(viewingProduct.price);
-                    openCheckout({
-                      ...viewingProduct,
-                      name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
-                      price: String(unitPrice * detailQty)
-                    });
-                  }}
-                  className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-3 rounded-xl text-xs sm:text-sm shadow-lg shadow-amber-500/25 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
-                >
-                  <Zap size={16} fill="currentColor" /> এক্ষুনি অর্ডার করুন
-                </button>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    onClick={(e) => addToCart(viewingProduct, e, detailQty)}
+                    className="bg-[#1c1710] hover:bg-amber-500/15 border-2 border-amber-400 text-amber-400 font-extrabold py-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                  >
+                    <ShoppingCart size={16} /> Add to Cart
+                  </button>
+                  <button
+                    onClick={() => {
+                      const unitPrice = viewingProduct.sellingPrice;
+                      openCheckout({
+                        ...viewingProduct,
+                        name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
+                        price: String(unitPrice * detailQty),
+                        sellingPrice: unitPrice * detailQty
+                      });
+                    }}
+                    className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-3 rounded-xl text-xs sm:text-sm shadow-lg shadow-amber-500/25 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                  >
+                    <Zap size={16} fill="currentColor" /> এক্ষুনি অর্ডার করুন
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* 3. RIGHT COLUMN: DARAZ DELIVERY, WARRANTY & OFFICIAL SELLER CARD */}
+            {/* 3. RIGHT COLUMN: DELIVERY, WARRANTY & OFFICIAL SELLER CARD */}
             <div className="lg:col-span-3 p-3.5 sm:p-5 bg-[#14100b] flex flex-col justify-between space-y-4">
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-amber-500/15 pb-2">
@@ -1243,9 +1405,7 @@ export default function NexaStore() {
                 <div className="flex items-start gap-2.5 text-xs">
                   <Truck size={16} className="text-amber-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <div className="flex justify-between">
-                      <p className="font-bold text-white">Standard Home Delivery</p>
-                    </div>
+                    <p className="font-bold text-white">Standard Home Delivery</p>
                     <p className="text-[11px] text-gray-400">ঢাকায় ১-২ দিন, ঢাকার বাইরে ২-৪ দিন</p>
                   </div>
                 </div>
@@ -1277,7 +1437,7 @@ export default function NexaStore() {
                 </div>
               </div>
 
-              {/* 🏪 DARAZ STYLE OFFICIAL STORE / SELLER CARD */}
+              {/* 🏪 OFFICIAL STORE CARD */}
               <div className="bg-[#1b160f] border border-amber-500/25 rounded-xl p-3 space-y-2.5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-300 text-black font-black flex items-center justify-center text-sm shrink-0">
@@ -1304,7 +1464,7 @@ export default function NexaStore() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <a 
-                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" (দাম: ৳${viewingProduct.price}) অর্ডার করতে চাই।`)}`}
+                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" (দাম: ৳${viewingProduct.sellingPrice}) অর্ডার করতে চাই।`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/40 text-[#25D366] text-[11px] font-bold py-1.5 rounded-lg flex items-center justify-center gap-1 transition"
@@ -1322,9 +1482,8 @@ export default function NexaStore() {
             </div>
           </div>
 
-          {/* ⭐ DARAZ STYLE DYNAMIC RATINGS & REVIEWS + PRODUCT DESCRIPTION */}
+          {/* ⭐ RATINGS & REVIEWS + PRODUCT DESCRIPTION */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
-            {/* প্রোডাক্টের বিবরণ */}
             <div className="lg:col-span-6 bg-[#110e09] border border-amber-500/20 rounded-2xl p-4 sm:p-5">
               <h3 className="text-sm sm:text-base font-extrabold text-amber-400 border-b border-amber-500/15 pb-2.5 mb-3">
                 Product Details of {viewingProduct.name}
@@ -1332,15 +1491,14 @@ export default function NexaStore() {
               <div className="text-xs sm:text-sm text-gray-300 space-y-2.5 leading-relaxed">
                 <p>✅ <b>মডেল / নাম:</b> {viewingProduct.name}</p>
                 <p>✅ <b>ব্র্যান্ড (Brand):</b> {detectedBrand}</p>
-                <p>✅ <b>ক্যাটাগরি:</b> {viewingProduct.category || 'Official Flagship'}</p>
+                <p>✅ <b>ক্যাটাগরি:</b> {viewingProduct.category}</p>
+                <p>✅ <b>স্টক স্ট্যাটাস:</b> {viewingProduct.stock}</p>
                 <p>✅ <b>কোয়ালিটি:</b> ১০০% অরিজিনাল এবং প্রিমিয়াম কোয়ালিটি প্রোডাক্ট।</p>
                 <p>✅ <b>চেকিং সুবিধা:</b> ডেলিভারি ম্যানের সামনে প্রোডাক্ট খুলে দেখে তারপর টাকা পরিশোধ করতে পারবেন।</p>
                 <p>✅ <b>রিটার্ন পলিসি:</b> পণ্যে কোনো সমস্যা থাকলে ৭ দিনের মধ্যে সহজ রিপ্লেসমেন্ট সুবিধা।</p>
-                {viewingProduct.description && <p className="mt-2 text-gray-200">{viewingProduct.description}</p>}
               </div>
             </div>
 
-            {/* কাস্টমার রিভিউ সেকশন (প্রতিটি প্রোডাক্টে আলাদা ৩টি করে ভেরিফাইড রিভিউ দেখাবে) */}
             <div className="lg:col-span-6 bg-[#110e09] border border-amber-500/20 rounded-2xl p-4 sm:p-5">
               <div className="flex items-center justify-between border-b border-amber-500/15 pb-2.5 mb-3">
                 <div>
@@ -1376,9 +1534,7 @@ export default function NexaStore() {
             </div>
           </div>
 
-          {/* ===================================================================== */}
-          {/* 🔥 DARAZ "YOU MAY ALSO LIKE" (নিচে অনেকগুলো প্রোডাক্ট দেখাবে) */}
-          {/* ===================================================================== */}
+          {/* 🔥 "YOU MAY ALSO LIKE" */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3 bg-[#110e0a] border border-amber-500/20 rounded-xl px-3.5 py-2.5">
               <div className="flex items-center gap-2">
@@ -1399,66 +1555,11 @@ export default function NexaStore() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-              {products.filter(p => p.id !== viewingProduct.id).map((item) => {
-                const itemProof = getProductSocialProof(item);
-                return (
-                  <div 
-                    key={item.id} 
-                    onClick={() => openProductDetails(item)}
-                    className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
-                  >
-                    <div>
-                      <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                        <img 
-                          src={item.image_url} 
-                          alt={item.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
-                        />
-                        <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                          {item.discount || '-40%'}
-                        </span>
-                      </div>
-
-                      <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                        {item.name}
-                      </h4>
-
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-amber-400 font-black text-sm">
-                          ৳{getCleanPrice(item.price)}
-                        </span>
-                        <span className="text-gray-500 line-through text-[10px]">
-                          ৳{getOriginalPrice(item)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                        <Star size={10} fill="currentColor" />
-                        <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
-                      <button 
-                        onClick={(e) => addToCart(item, e)}
-                        className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <ShoppingCart size={11} /> Cart
-                      </button>
-                      <button 
-                        onClick={(e) => openCheckout(item, e)}
-                        className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
-                      >
-                        Buy Now
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {products.filter(p => p.id !== viewingProduct.id).map((item) => renderProductCard(item))}
             </div>
           </div>
 
-          {/* 📱 DARAZ APP STYLE MOBILE STICKY BOTTOM BAR */}
+          {/* 📱 MOBILE STICKY BOTTOM BAR */}
           <div className="fixed bottom-0 left-0 right-0 z-[115] lg:hidden bg-[#100d08]/95 backdrop-blur-md border-t border-amber-500/30 px-3 py-2 flex items-center gap-2 shadow-[0_-8px_25px_rgba(0,0,0,0.85)]">
             <button
               onClick={() => setViewingProduct(null)}
@@ -1478,37 +1579,50 @@ export default function NexaStore() {
               <span className="text-[10px] font-bold mt-0.5">Chat</span>
             </a>
 
-            <button
-              onClick={(e) => addToCart(viewingProduct, e, detailQty)}
-              className="flex-1 bg-[#1c1812] border border-amber-400 text-amber-400 font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <ShoppingCart size={14} /> Add to Cart
-            </button>
+            {viewingProduct.isOutOfStock ? (
+              <button
+                type="button"
+                disabled
+                className="flex-1 bg-red-950/60 border border-red-500/40 text-red-400 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 cursor-not-allowed"
+              >
+                <Ban size={14} /> Out of Stock
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={(e) => addToCart(viewingProduct, e, detailQty)}
+                  className="flex-1 bg-[#1c1812] border border-amber-400 text-amber-400 font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <ShoppingCart size={14} /> Add to Cart
+                </button>
 
-            <button
-              onClick={() => {
-                const unitPrice = getCleanPrice(viewingProduct.price);
-                openCheckout({
-                  ...viewingProduct,
-                  name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
-                  price: String(unitPrice * detailQty)
-                });
-              }}
-              className="flex-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black py-2.5 rounded-xl text-xs shadow-md flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-            >
-              <Zap size={14} fill="currentColor" /> অর্ডার করুন
-            </button>
+                <button
+                  onClick={() => {
+                    const unitPrice = viewingProduct.sellingPrice;
+                    openCheckout({
+                      ...viewingProduct,
+                      name: detailQty > 1 ? `${viewingProduct.name} (${detailQty}x)` : viewingProduct.name,
+                      price: String(unitPrice * detailQty),
+                      sellingPrice: unitPrice * detailQty
+                    });
+                  }}
+                  className="flex-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-black py-2.5 rounded-xl text-xs shadow-md flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                >
+                  <Zap size={14} fill="currentColor" /> অর্ডার করুন
+                </button>
+              </>
+            )}
           </div>
         </div>
       ) : (
         <>
           {/* ===================================================================== */}
-          {/* 👑 3. HERO CONTAINER (মোবাইল ও পিসিতে ১০০% ফিট ব্যানার) */}
+          {/* 👑 3. HERO CONTAINER */}
           {/* ===================================================================== */}
           <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-3">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
               
-              {/* Left Categories Sidebar */}
+              {/* Left Categories Sidebar (Gadgets & Electronics সহ সব ক্যাটাগরি) */}
               <div className="hidden lg:block lg:col-span-3 bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
                 <div className="flex items-center gap-2 font-bold text-white text-xs mb-3 pb-2 border-b border-amber-500/20">
                   <Menu size={16} className="text-amber-400" />
@@ -1518,8 +1632,12 @@ export default function NexaStore() {
                   {sidebarCategories.map((cat, i) => (
                     <li 
                       key={i} 
-                      onClick={() => { setSearchQuery(cat.query); scrollToProducts(); }}
-                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-300 hover:bg-amber-500/10 hover:text-amber-400 cursor-pointer transition"
+                      onClick={() => handleSelectCategory(cat.cat)}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition ${
+                        selectedCategory === cat.cat
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'text-gray-300 hover:bg-amber-500/10 hover:text-amber-400'
+                      }`}
                     >
                       <span className="flex items-center gap-2.5">
                         {cat.icon}
@@ -1531,7 +1649,7 @@ export default function NexaStore() {
                 </ul>
               </div>
 
-              {/* Right Banner — মোবাইলে পুরোপুরি সেট হবে, একটুও কাটবে না */}
+              {/* Right Banner */}
               <div className={`lg:col-span-9 rounded-2xl relative overflow-hidden border-2 border-amber-500/40 shadow-xl ${
                 settings.hero_image 
                   ? 'bg-[#0d0a06] flex items-center justify-center min-h-[165px] sm:min-h-[260px] md:min-h-[350px]' 
@@ -1550,16 +1668,16 @@ export default function NexaStore() {
 
                     <div className="relative z-10 max-w-[62%] sm:max-w-sm md:max-w-md">
                       <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest inline-block mb-1 sm:mb-2">
-                        NEXA
+                        {settings.store_name || 'NEXA'}
                       </span>
                       <h3 className="text-lg sm:text-2xl md:text-3xl font-serif italic text-white font-bold leading-tight">
-                        Big Fashion
+                        {settings.hero_title || 'Gadgets & Fashion'}
                       </h3>
                       <h2 className="text-3xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 italic tracking-tight leading-none mb-1 sm:mb-2">
                         SALE
                       </h2>
-                      <p className="text-sm sm:text-2xl md:text-3xl font-extrabold text-white mb-3 sm:mb-6">
-                        Up to <span className="text-amber-400">70% OFF</span>
+                      <p className="text-sm sm:text-xl md:text-2xl font-extrabold text-white mb-3 sm:mb-6">
+                        {settings.hero_subtitle || <>Best Deals in <span className="text-amber-400">Bangladesh</span></>}
                       </p>
                       <button 
                         onClick={scrollToProducts}
@@ -1576,18 +1694,13 @@ export default function NexaStore() {
                         className="h-[96%] sm:h-[105%] w-full sm:w-auto object-cover object-top drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)] filter brightness-105"
                       />
                     </div>
-
-                    <div className="absolute right-8 top-10 hidden md:block text-right pointer-events-none">
-                      <p className="text-2xl font-serif italic text-amber-200/90 leading-tight">Be Stylish</p>
-                      <p className="text-3xl font-serif italic font-bold text-white">Be Nexa</p>
-                    </div>
                   </>
                 )}
               </div>
 
             </div>
 
-            {/* ⚡ 4. [আসল গোল্ডেন স্ট্রিপ] */}
+            {/* ⚡ 4. গোল্ডেন অফার স্ট্রিপ */}
             <div className="mt-4 bg-gradient-to-r from-[#0c0904] via-[#1a1308] to-[#0c0904] rounded-2xl p-3 md:p-3.5 border border-amber-500/40 shadow-lg shadow-amber-500/10 flex flex-wrap items-center justify-between gap-4 text-white">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-300 text-black flex items-center justify-center font-bold shadow-md shadow-amber-500/20">
@@ -1595,14 +1708,8 @@ export default function NexaStore() {
                 </div>
                 <div>
                   <h4 className="text-white text-sm font-black tracking-wide leading-tight">Flash Sale</h4>
-                  <p className="text-[11px] text-amber-400 font-semibold">On Sale Now</p>
+                  <p className="text-[11px] text-amber-400 font-semibold">Live Deals Now</p>
                 </div>
-                <button 
-                  onClick={scrollToProducts}
-                  className="w-7 h-7 rounded-full border border-amber-400/40 hover:border-amber-400 flex items-center justify-center text-amber-400 hover:bg-amber-400/10 transition ml-1 cursor-pointer"
-                >
-                  <ArrowRight size={13} />
-                </button>
               </div>
 
               <div className="hidden lg:flex items-center gap-3 border-x border-amber-500/20 px-8">
@@ -1611,9 +1718,9 @@ export default function NexaStore() {
                 </div>
                 <div>
                   <p className="text-sm font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 leading-tight">
-                    Up to 80% OFF
+                    {settings.hero_subtitle || "Special Discount Offer Live!"}
                   </p>
-                  <p className="text-[11px] text-gray-400 font-medium">Limited Time Offer</p>
+                  <p className="text-[11px] text-gray-400 font-medium">Cash on Delivery Available</p>
                 </div>
               </div>
 
@@ -1621,8 +1728,8 @@ export default function NexaStore() {
                 <div className="flex items-center gap-2">
                   <Crown size={22} className="text-amber-400 fill-amber-400" />
                   <div>
-                    <p className="text-sm font-black text-white leading-tight">Tech Deals</p>
-                    <p className="text-[11px] text-amber-400 font-bold">Live Now</p>
+                    <p className="text-sm font-black text-white leading-tight">Gadgets & Tech</p>
+                    <p className="text-[11px] text-amber-400 font-bold">100% Authentic</p>
                   </div>
                 </div>
                 <button 
@@ -1643,79 +1750,31 @@ export default function NexaStore() {
                 <Zap size={20} className="text-amber-400 fill-amber-400" />
                 <div>
                   <h3 className="text-base font-black text-white leading-none">Flash Sale</h3>
-                  <span className="text-[11px] text-amber-400 font-semibold">On Sale Now</span>
+                  <span className="text-[11px] text-amber-400 font-semibold">Top Deals Today</span>
                 </div>
               </div>
               <button 
-                onClick={() => { setSearchQuery(''); scrollToProducts(); }}
+                onClick={() => { setSelectedCategory('All'); setSearchQuery(''); scrollToProducts(); }}
                 className="text-[11px] font-bold text-amber-400 hover:text-white border border-amber-500/40 hover:border-amber-400 px-3 py-1 rounded transition uppercase tracking-wider flex items-center gap-1 cursor-pointer"
               >
                 Shop All Products <ArrowRight size={12} />
               </button>
             </div>
 
-            {/* Top Flash Sale Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-              {products.slice(0, 6).map((item) => {
-                const itemProof = getProductSocialProof(item);
-                return (
-                  <div 
-                    key={item.id} 
-                    onClick={() => openProductDetails(item)}
-                    className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
-                  >
-                    <div>
-                      <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                        <img 
-                          src={item.image_url} 
-                          alt={item.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        />
-                        <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                          {item.discount || '-40%'}
-                        </span>
-                      </div>
-
-                      <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                        {item.name}
-                      </h4>
-
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-amber-400 font-black text-sm">
-                          ৳{getCleanPrice(item.price)}
-                        </span>
-                        <span className="text-gray-500 line-through text-[10px]">
-                          ৳{getOriginalPrice(item)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                        <Star size={10} fill="currentColor" />
-                        <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={(e) => openCheckout(item, e)}
-                      className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black py-1.5 rounded-lg text-[11px] shadow-md transition flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                    >
-                      Buy Now
-                    </button>
-                  </div>
-                );
-              })}
+              {products.slice(0, 6).map((item) => renderProductCard(item))}
             </div>
           </div>
 
-          {/* 🔲 6. CATEGORIES SECTION */}
+          {/* 🔲 6. CATEGORIES SECTION (Gadgets & Electronics সহ সব ক্যাটাগরি) */}
           <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
             <div className="bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <LayoutGrid size={18} className="text-amber-400" />
-                  <h3 className="text-sm font-bold text-white">Categories</h3>
+                  <h3 className="text-sm font-bold text-white">Shop By Category</h3>
                 </div>
-                <span className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer" onClick={() => { setSearchQuery(''); scrollToProducts(); }}>
+                <span className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer" onClick={() => handleSelectCategory('All')}>
                   See All <ArrowRight size={12} />
                 </span>
               </div>
@@ -1724,13 +1783,17 @@ export default function NexaStore() {
                 {visualCategories.map((cat, i) => (
                   <div 
                     key={i} 
-                    onClick={() => { setSearchQuery(cat.query); scrollToProducts(); }}
-                    className="bg-[#18140f] hover:bg-[#221c15] p-2.5 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition border border-amber-500/10 hover:border-amber-400/40 group"
+                    onClick={() => handleSelectCategory(cat.cat)}
+                    className={`p-2.5 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer transition border group ${
+                      selectedCategory === cat.cat
+                        ? 'bg-amber-500/20 border-amber-400'
+                        : 'bg-[#18140f] hover:bg-[#221c15] border-amber-500/10 hover:border-amber-400/40'
+                    }`}
                   >
                     <div className="w-12 h-12 rounded-lg overflow-hidden mb-1.5 bg-[#251e15] p-1 shadow-xs flex items-center justify-center">
                       <img src={cat.img} alt={cat.name} className="w-full h-full object-cover rounded group-hover:scale-110 transition duration-300" />
                     </div>
-                    <span className="text-[10px] font-bold text-gray-300 line-clamp-1 group-hover:text-amber-400 transition">
+                    <span className="text-[10px] font-bold text-gray-200 line-clamp-1 group-hover:text-amber-400 transition">
                       {cat.name}
                     </span>
                   </div>
@@ -1739,24 +1802,28 @@ export default function NexaStore() {
             </div>
           </div>
 
-          {/* 🔥 7. JUST FOR YOU (ক্লিক করলে প্রোডাক্টের বিস্তারিত পেজ ওপেন হবে) */}
+          {/* 🔥 7. JUST FOR YOU (ক্যাটাগরি ফিল্টার ট্যাবসহ সব প্রোডাক্ট) */}
           <div id="just-for-you" className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
                 <Flame size={20} className="text-amber-400 fill-amber-400" />
                 <div>
                   <h3 className="text-base font-black text-white leading-tight">
-                    {searchQuery ? `Products in: "${searchQuery}"` : "Just For You"}
+                    {selectedCategory !== 'All'
+                      ? `Category: ${selectedCategory}`
+                      : searchQuery
+                      ? `Search: "${searchQuery}"`
+                      : "Just For You"}
                   </h3>
                   <p className="text-[11px] text-amber-400/80 font-medium">
-                    {searchQuery ? `${filteredProducts.length} items found` : "প্রোডাক্টের বিস্তারিত ও ৪টি ছবি দেখতে যেকোনো প্রোডাক্টের ওপর ক্লিক করুন"}
+                    প্রোডাক্টের বিস্তারিত ও ৪টি ছবি দেখতে যেকোনো প্রোডাক্টের ওপর ক্লিক করুন ({filteredProducts.length} items)
                   </p>
                 </div>
               </div>
 
-              {searchQuery && (
+              {(searchQuery || selectedCategory !== 'All') && (
                 <button 
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
                   className="text-xs bg-[#1c1812] border border-amber-500/40 hover:border-amber-400 text-amber-400 px-3 py-1 rounded-full transition flex items-center gap-1 cursor-pointer"
                 >
                   Show All Products <X size={12} />
@@ -1764,13 +1831,30 @@ export default function NexaStore() {
               )}
             </div>
 
+            {/* 📂 Dynamic Category Filter Pills (Gadgets & Electronics সহ সব ক্যাটাগরি) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 no-scrollbar">
+              {dynamicCategoryTabs.map((catName) => (
+                <button
+                  key={catName}
+                  onClick={() => { setSelectedCategory(catName); setSearchQuery(''); }}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                    selectedCategory === catName
+                      ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow-md'
+                      : 'bg-[#14110b] text-gray-300 border border-amber-500/20 hover:border-amber-400'
+                  }`}
+                >
+                  {catName === 'All' ? `All Products (${products.length})` : catName}
+                </button>
+              ))}
+            </div>
+
             {filteredProducts.length === 0 ? (
               <div className="text-center py-16 bg-[#110e0a] rounded-2xl border border-amber-500/20">
                 <Search size={40} className="text-gray-600 mx-auto mb-3" />
-                <h4 className="text-lg font-bold text-gray-300">"{searchQuery}" দিয়ে কোনো প্রোডাক্ট পাওয়া যায়নি</h4>
-                <p className="text-xs text-gray-500 mt-1">অন্য কোনো নাম দিয়ে সার্চ করুন অথবা ফিল্টার ক্লিয়ার করুন।</p>
+                <h4 className="text-lg font-bold text-gray-300">কোনো প্রোডাক্ট পাওয়া যায়নি</h4>
+                <p className="text-xs text-gray-500 mt-1">অন্য কোনো ক্যাটাগরি সিলেক্ট করুন অথবা সব প্রোডাক্ট দেখুন।</p>
                 <button 
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
                   className="mt-4 bg-gradient-to-r from-amber-400 to-yellow-500 text-black font-bold text-xs px-5 py-2 rounded-full cursor-pointer"
                 >
                   সব প্রোডাক্ট দেখুন
@@ -1778,62 +1862,7 @@ export default function NexaStore() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-                {filteredProducts.map((item) => {
-                  const itemProof = getProductSocialProof(item);
-                  return (
-                    <div 
-                      key={item.id} 
-                      onClick={() => openProductDetails(item)}
-                      className="bg-[#120f0a] rounded-xl p-2.5 shadow-lg hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] transition duration-200 flex flex-col justify-between border border-amber-500/20 hover:border-amber-400 group cursor-pointer"
-                    >
-                      <div>
-                        <div className="relative w-full aspect-square bg-[#1b1610] rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                          <img 
-                            src={item.image_url} 
-                            alt={item.name} 
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                          />
-                          <span className="absolute top-1 right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
-                            {item.discount || '-35%'}
-                          </span>
-                        </div>
-
-                        <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
-                          {item.name}
-                        </h4>
-
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-amber-400 font-black text-sm">
-                            ৳{getCleanPrice(item.price)}
-                          </span>
-                          <span className="text-gray-500 line-through text-[10px]">
-                            ৳{getOriginalPrice(item)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
-                          <Star size={10} fill="currentColor" />
-                          <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-amber-500/15">
-                        <button 
-                          onClick={(e) => addToCart(item, e)}
-                          className="bg-[#1c1812] hover:bg-amber-400/10 border border-amber-500/30 hover:border-amber-400 text-amber-400 text-[11px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                          <ShoppingCart size={11} /> Cart
-                        </button>
-                        <button 
-                          onClick={(e) => openCheckout(item, e)}
-                          className="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black text-[11px] font-black py-1.5 rounded-lg transition shadow-md flex items-center justify-center gap-0.5 cursor-pointer active:scale-95"
-                        >
-                          Buy Now
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {filteredProducts.map((item) => renderProductCard(item))}
               </div>
             )}
           </div>
@@ -1876,14 +1905,14 @@ export default function NexaStore() {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span className="w-1 h-4 rounded-full bg-amber-400" />
-              <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Shop</h4>
+              <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Categories</h4>
             </div>
             <ul className="space-y-2 text-[11px] text-gray-400">
-              <li><button onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">All Products</button></li>
-              <li><button onClick={() => { setViewingProduct(null); setSearchQuery('Electronics'); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">New Arrivals</button></li>
-              <li><button onClick={() => { setViewingProduct(null); setSearchQuery('Fashion'); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Best Sellers</button></li>
-              <li><button onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Deals & Offers</button></li>
-              <li><button onClick={() => { setViewingProduct(null); setSearchQuery(''); scrollToProducts(); }} className="hover:text-amber-400 transition cursor-pointer">Categories</button></li>
+              <li><button onClick={() => handleSelectCategory('Gadgets & Electronics')} className="hover:text-amber-400 transition cursor-pointer">Gadgets & Electronics</button></li>
+              <li><button onClick={() => handleSelectCategory('Phones & Accessories')} className="hover:text-amber-400 transition cursor-pointer">Phones & Accessories</button></li>
+              <li><button onClick={() => handleSelectCategory('Watches & Jewelry')} className="hover:text-amber-400 transition cursor-pointer">Watches & Jewelry</button></li>
+              <li><button onClick={() => handleSelectCategory('Health & Beauty')} className="hover:text-amber-400 transition cursor-pointer">Health & Beauty</button></li>
+              <li><button onClick={() => handleSelectCategory('Fashion & Lifestyle')} className="hover:text-amber-400 transition cursor-pointer">Fashion & Lifestyle</button></li>
             </ul>
           </div>
 
