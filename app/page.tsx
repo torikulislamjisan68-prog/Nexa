@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect } from 'react';
 import { 
   Search, ShoppingCart, Zap, Menu, ChevronRight, ChevronLeft,
@@ -11,12 +10,10 @@ import {
   Globe as Facebook, Camera as Instagram, Play as Youtube, Music as Music2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
-
 // 🧠 প্রোডাক্টের নাম দেখে অটোমেটিক ক্যাটাগরি চেনার স্মার্ট ফাংশন (Admin Panel এর সাথে ১০০% মিলানো)
 function detectAutoCategory(name = "") {
   const n = name.toLowerCase();
   if (!n.trim()) return "Gadgets & Electronics";
-
   if (/(iphone|i phone|samsung|galaxy|xiaomi|redmi|realme|oppo|vivo|oneplus|pixel|phone|mobile|casing|cover|charger|cable|powerbank|power bank|adapter|sim)/.test(n)) {
     return "Phones & Accessories";
   }
@@ -40,13 +37,11 @@ function detectAutoCategory(name = "") {
   }
   return "Gadgets & Electronics";
 }
-
 // 🔗 Admin Panel থেকে পাঠানো ছবি, Real Price, Discount Price, Stock, Offer এবং Category রিড করার মাস্টার ফাংশন
 function normalizeAdminProduct(rawProduct: any) {
   if (!rawProduct) return null;
-
   const rawUrl = String(rawProduct.image_url || "");
-  let meta = {
+  let meta: any = {
     realPrice: "",
     discountPrice: "",
     stock: "In Stock",
@@ -54,7 +49,6 @@ function normalizeAdminProduct(rawProduct: any) {
     category: ""
   };
   let cleanUrlForGallery = rawUrl;
-
   if (rawUrl.includes("#meta=")) {
     const [beforeMeta, afterMeta] = rawUrl.split("#meta=");
     const [metaEncoded, galleryPart] = afterMeta.split("#gallery=");
@@ -65,49 +59,47 @@ function normalizeAdminProduct(rawProduct: any) {
     }
     cleanUrlForGallery = galleryPart ? `${beforeMeta}#gallery=${galleryPart}` : beforeMeta;
   }
-
   const [mainUrl, galleryHash] = cleanUrlForGallery.split("#gallery=");
   const extras = galleryHash ? galleryHash.split("|").filter(Boolean) : [];
-  const allImages = [mainUrl, ...extras].filter(Boolean);
-
+  const metaImages = Array.isArray(meta.images)
+    ? meta.images
+    : Array.isArray(meta.gallery)
+    ? meta.gallery
+    : [];
+  const existingImages = Array.isArray(rawProduct.images) ? rawProduct.images : [];
+  const allImages = Array.from(
+    new Set([mainUrl, ...extras, ...metaImages, ...existingImages].filter(Boolean))
+  );
   const parseNum = (val: any) => parseFloat(String(val || "0").replace(/[^0-9.]/g, "")) || 0;
-
   const dbPriceNum = parseNum(rawProduct.price);
   const origColNum = parseNum(rawProduct.original_price);
-
   const realPriceNum = meta.realPrice
     ? parseNum(meta.realPrice)
     : origColNum > dbPriceNum
     ? origColNum
     : dbPriceNum;
-
   const discountPriceNum = meta.discountPrice
     ? parseNum(meta.discountPrice)
     : origColNum > dbPriceNum
     ? dbPriceNum
     : 0;
-
   const sellingPriceNum = discountPriceNum > 0 ? discountPriceNum : realPriceNum || dbPriceNum;
   const hasDiscount = realPriceNum > sellingPriceNum && sellingPriceNum > 0;
   const discountPercent = hasDiscount
     ? Math.round(((realPriceNum - sellingPriceNum) / realPriceNum) * 100)
     : 0;
-
   // এডমিন প্যানেল থেকে অফার দিলে সেটি দেখাবে, নাহলে ডিসকাউন্ট পার্সেন্টেজ থাকলে সেটি দেখাবে (ভুয়া -40% আর দেখাবে না)
   const offerText = meta.offer
     ? meta.offer.trim()
     : discountPercent > 0
     ? `-${discountPercent}%`
     : "";
-
   const stockStatus = meta.stock || rawProduct.stock || "In Stock";
   const isOutOfStock = stockStatus === "Out of Stock";
-
   const finalCategory =
     meta.category ||
     rawProduct.category ||
     detectAutoCategory(rawProduct.name || "");
-
   return {
     ...rawProduct,
     image_url: allImages[0] || "https://via.placeholder.com/300",
@@ -124,7 +116,6 @@ function normalizeAdminProduct(rawProduct: any) {
     category: finalCategory
   };
 }
-
 export default function NexaStore() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -138,7 +129,6 @@ export default function NexaStore() {
     hero_image: ''
   });
   const [loading, setLoading] = useState(true);
-
   // 🔍 দারাজের মতো প্রোডাক্ট ডিটেইলস পেজ, ৪টি ছবির গ্যালারি এবং ইমেজ জুম স্টেট
   const [viewingProduct, setViewingProduct] = useState<any>(null);
   const [detailQty, setDetailQty] = useState<number>(1);
@@ -155,13 +145,10 @@ export default function NexaStore() {
   const [copied, setCopied] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
-
   // ☎️ Customer Care Popup State
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-
   // 💸 আপনার বিকাশ ও নগদ নাম্বার
   const MERCHANT_NUMBER = "01935133944";
-
   // ☎️ হেল্পলাইন / কাস্টমার কেয়ার
   const HELPLINE_NUMBER = "01935133944";
   const WHATSAPP_NUMBER = "8801935133944";
@@ -169,17 +156,14 @@ export default function NexaStore() {
   const STORE_EMAIL = "support@nexa.com.bd";
   const STORE_ADDRESS = "ঢাকা, বাংলাদেশ";
   const whatsappUrl = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent("হ্যালো " + settings.store_name + ", আমার সাহায্য প্রয়োজন।");
-
   const copyNumber = () => {
     navigator.clipboard.writeText(MERCHANT_NUMBER);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
   const openHelp = () => setIsHelpOpen(true);
   const closeHelp = () => setIsHelpOpen(false);
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-
   // প্রোডাক্টের বিস্তারিত পেজ ওপেন করার ফাংশন (Daraz Style)
   const openProductDetails = (product: any) => {
     setViewingProduct(product);
@@ -189,19 +173,15 @@ export default function NexaStore() {
     setIsWishlisted(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
   // 🧠 ১. SMART AUTO-BRAND DETECTOR
   const getProductBrand = (product: any): string => {
     if (!product) return 'NEXA Official';
-
     if (product.brand && product.brand.trim() !== '' && product.brand.trim().toLowerCase() !== 'no brand') {
       return product.brand.trim();
     }
-
     const title = (product.name || '').toLowerCase();
     const category = (product.category || '').toLowerCase();
     const compactTitle = title.replace(/[\s-_]/g, '');
-
     const brandRules: { keywords: string[]; brandName: string }[] = [
       { keywords: ['iphone', 'ipad', 'macbook', 'airpod', 'apple', 'imac', 'iwatch'], brandName: 'Apple' },
       { keywords: ['samsung', 'galaxy'], brandName: 'Samsung' },
@@ -299,7 +279,6 @@ export default function NexaStore() {
       { keywords: ['gripper', 'exercise', 'dumbbell', 'gym', 'fitness'], brandName: 'Domyos Sports' },
       { keywords: ['container', 'bowl', 'kitchen', 'organizer', 'storage'], brandName: 'HomeLux' },
     ];
-
     for (const rule of brandRules) {
       for (const kw of rule.keywords) {
         if (compactTitle.includes(kw.replace(/[\s-_]/g, '')) || title.includes(kw)) {
@@ -307,14 +286,12 @@ export default function NexaStore() {
         }
       }
     }
-
     const genericWords = new Set([
       'smart', 'mini', 'super', 'cute', 'high', 'speed', 'high-speed', '3d', '6d', '4d', 'new', 'best',
       'premium', 'original', 'portable', 'wireless', 'electric', 'digital', 'led', 'rgb', 'bass', 'boost',
       'men', 'women', 'kids', 'baby', 'auto', 'fast', 'heavy', 'duty', 'pro', 'ultra', 'max', 'plus',
       'rechargeable', 'waterproof', 'magnetic', 'realistic', 'hand', 'air', 'ice', 'dual', 'instant', 'luxury'
     ]);
-
     const rawWords = (product.name || '').trim().split(/[\s-]+/);
     for (const w of rawWords) {
       const cleanWord = w.replace(/[^a-zA-Z0-9]/g, '');
@@ -322,16 +299,13 @@ export default function NexaStore() {
         return cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1);
       }
     }
-
     if (category.includes('gadget') || category.includes('elect') || category.includes('phone')) return 'Baseus Tech';
     if (category.includes('fash') || category.includes('cloth')) return 'Zara Fashion';
     if (category.includes('home') || category.includes('kitchen')) return 'HomeLux';
     if (category.includes('health') || category.includes('beauty')) return 'SKG Care';
     if (category.includes('watch')) return 'Watch Ultra';
-
     return `${settings.store_name || 'NEXA'} Official`;
   };
-
   // 🌟 ২. SMART DYNAMIC RATING, SOLD & MULTI-REVIEW GENERATOR
   const getProductSocialProof = (product: any) => {
     if (!product) {
@@ -342,19 +316,16 @@ export default function NexaStore() {
         reviews: []
       };
     }
-
     const str = `${product.id || ''}_${product.name || 'nexa'}`;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       hash = (hash * 31 + str.charCodeAt(i)) % 100000;
     }
-
     const possibleScores = ['4.8', '4.9', '4.7', '5.0', '4.9', '4.8'];
     const ratingScore = possibleScores[hash % possibleScores.length];
     const ratingCount = 45 + (hash % 340);
     const soldMultiplier = 2 + (hash % 2);
     const soldCount = ratingCount * soldMultiplier + (hash % 45);
-
     const allReviewsPool = [
       { name: 'তানভীর আহমেদ', date: '২ দিন আগে', stars: 5, text: 'আলহামদুলিল্লাহ, ছবির সাথে ১০০% মিল আছে। ডেলিভারি খুব দ্রুত পেয়েছি এবং প্যাকেজিং দারুণ ছিল।' },
       { name: 'সাদিয়া ইসলাম', date: '৪ দিন আগে', stars: 5, text: 'প্রোডাক্টের কোয়ালিটি দামের তুলনায় অনেক ভালো। হাতে পেয়ে চেক করে টাকা দিয়েছি, ধন্যবাদ!' },
@@ -369,12 +340,10 @@ export default function NexaStore() {
       { name: 'সাব্বির হোসেন', date: '১ সপ্তাহ আগে', stars: 5, text: 'এক কথায় অস্থির প্রোডাক্ট! ডেলিভারির সময় খুলে চেক করে নেওয়ার সুবিধা থাকায় কোনো টেনশন ছিল না।' },
       { name: 'জান্নাতুল ফেরদৌস', date: '৩ দিন আগে', stars: 5, text: 'ছবিতে যেমন দেখেছি বাস্তবে তার চেয়েও বেশি সুন্দর। ফিনিশিং এবং কোয়ালিটি ১০ এ ১০!' },
     ];
-
     const totalReviews = allReviewsPool.length;
     const idx1 = hash % totalReviews;
     const idx2 = (hash + 3) % totalReviews;
     const idx3 = (hash + 7) % totalReviews;
-
     return {
       ratingScore,
       ratingCount,
@@ -382,20 +351,19 @@ export default function NexaStore() {
       reviews: [allReviewsPool[idx1], allReviewsPool[idx2], allReviewsPool[idx3]]
     };
   };
-
   // 🖼️ প্রোডাক্টের ৪টি আলাদা ছবির গ্যালারি বের করার ফাংশন
   const getProductGallery = (product: any) => {
     if (!product) return [];
-    const normalized = normalizeAdminProduct(product);
-    const urls: string[] = normalized?.images || [];
+    const urls: string[] =
+      Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : normalizeAdminProduct(product)?.images || [];
     return urls.slice(0, 4).map((url) => ({
       url,
       imgClass: 'scale-100 object-center'
     }));
   };
-
   const getCleanPrice = (val: any) => Number(val?.toString().replace(/[^0-9.]/g, '')) || 0;
-
   // ব্যাকআপ প্রোডাক্ট তালিকা (যদি ডাটাবেস খালি থাকে)
   const defaultProducts = [
     { id: 1, name: 'iPhone 13 Pro Max - 128GB Flagship Phone', category: 'Phones & Accessories', price: '70000', original_price: '85000', image_url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80' },
@@ -403,7 +371,6 @@ export default function NexaStore() {
     { id: 3, name: 'M10 TWS Wireless Earbuds Deep Bass Bluetooth 5.1', category: 'Gadgets & Electronics', price: '380', original_price: '650', image_url: 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&q=80' },
     { id: 4, name: '5-in-1 Hand-Kneading Neck & Shoulder Massager', category: 'Health & Beauty', price: '2240', original_price: '2800', image_url: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=400&q=80' },
   ];
-
   useEffect(() => {
     async function fetchData() {
       const { data: pData } = await supabase.from('products').select('*').order('id', { ascending: false });
@@ -413,48 +380,39 @@ export default function NexaStore() {
       } else {
         setProducts(defaultProducts.map((item) => normalizeAdminProduct(item)));
       }
-
       const { data: sData } = await supabase.from('store_settings').select('*').eq('id', 1).single();
       if (sData) setSettings(sData);
-
       setLoading(false);
     }
     fetchData();
   }, []);
-
   // 🔍 স্মার্ট ফিল্টারিং লজিক (সার্চ এবং ক্যাটাগরি দুইটাই ১০০% কাজ করবে)
   const filteredProducts = products.filter((item) => {
     const itemCat = (item.category || '').toLowerCase();
     const selCat = selectedCategory.toLowerCase();
-
     // ১. ক্যাটাগরি ফিল্টার
     if (selectedCategory !== 'All') {
       if (itemCat !== selCat && !itemCat.includes(selCat)) {
         return false;
       }
     }
-
     // ২. সার্চ ফিল্টার
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     const name = (item.name || '').toLowerCase();
-
     return name.includes(q) || itemCat.includes(q);
   });
-
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setViewingProduct(null);
     setTimeout(() => scrollToProducts(), 100);
   };
-
   const handleSelectCategory = (catName: string) => {
     setSelectedCategory(catName);
     setSearchQuery('');
     setViewingProduct(null);
     setTimeout(() => scrollToProducts(), 100);
   };
-
   // কার্ট লজিক (Out of Stock হলে আটকানো)
   const addToCart = (product: any, e?: React.MouseEvent, customQty: number = 1) => {
     if (e) e.stopPropagation();
@@ -471,7 +429,6 @@ export default function NexaStore() {
     });
     setIsCartOpen(true);
   };
-
   const updateCartQty = (id: number, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
@@ -481,16 +438,13 @@ export default function NexaStore() {
       return item;
     }).filter(Boolean));
   };
-
   const removeFromCart = (id: number) => {
     setCart(prev => prev.filter(item => item.id !== id));
   };
-
   const cartTotal = cart.reduce((sum, item) => {
     const p = getCleanPrice(item.sellingPrice || item.price);
     return sum + (p * item.qty);
   }, 0);
-
   // চেকআউট লজিক (Out of Stock হলে আটকানো)
   const openCheckout = (product: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -504,52 +458,41 @@ export default function NexaStore() {
     setIsModalOpen(true);
     setOrderSuccess(false);
   };
-
   const isValidBDPhone = (phone: string) => {
     const cleaned = phone.replace(/[\s-]/g, "");
     if (/^01[3-9]\d{8}$/.test(cleaned)) return true;
     if (/^(\+880|880)1[3-9]\d{8}$/.test(cleaned)) return true;
     return false;
   };
-
   const handleOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!formData.name.trim()) {
       alert("দয়া করে আপনার নাম লিখুন।");
       return;
     }
-
     if (!isValidBDPhone(formData.phone)) {
       alert("সঠিক মোবাইল নাম্বার দিন। উদাহরণ: 01935133944");
       return;
     }
-
     if (formData.address.trim().length < 8) {
       alert("সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন।");
       return;
     }
-
     if (paymentMethod !== 'cod' && trxId.trim().length < 4) {
       alert(`অনুগ্রহ করে ${paymentMethod === 'bkash' ? 'বিকাশ' : 'নগদ'} Transaction ID বা শেষ ৪ ডিজিট লিখুন।`);
       return;
     }
-
     setIsSubmitting(true);
     const cleanedPhone = formData.phone.replace(/[\s-]/g, "").replace(/^(\+880|880)/, "0");
-
     const orderItemName = selectedProduct 
       ? selectedProduct.name 
       : cart.map(c => `${c.name} (${c.qty}x)`).join(', ');
-
     const rawCleanPrice = selectedProduct 
       ? String(getCleanPrice(selectedProduct.sellingPrice || selectedProduct.price))
       : String(cartTotal);
-
     const paymentNote = paymentMethod === 'cod'
       ? 'COD (ক্যাশ অন ডেলিভারি)'
       : `${paymentMethod === 'bkash' ? 'bKash' : 'Nagad'} (TrxID: ${trxId.trim().toUpperCase()})`;
-
     const { error } = await supabase.from('orders').insert([
       {
         customer_name: formData.name.trim(),
@@ -560,7 +503,6 @@ export default function NexaStore() {
         status: 'Pending'
       }
     ]);
-
     if (!error) {
       setOrderSuccess(true);
       setFormData({ name: '', phone: '', address: '' });
@@ -576,16 +518,13 @@ export default function NexaStore() {
     }
     setIsSubmitting(false);
   };
-
   const scrollToProducts = () => {
     const el = document.getElementById('just-for-you');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
-
   const payableAmount = selectedProduct 
     ? getCleanPrice(selectedProduct.sellingPrice || selectedProduct.price)
     : cartTotal;
-
   // 📂 এডমিন প্যানেলের সাথে ১০০% মিল রেখে সব ক্যাটাগরি (Gadgets & Electronics সবার উপরে!)
   const sidebarCategories = [
     { name: "Gadgets & Electronics", cat: "Gadgets & Electronics", icon: <Cpu size={14} className="text-amber-400" /> },
@@ -597,7 +536,6 @@ export default function NexaStore() {
     { name: "Baby & Kids", cat: "Baby & Kids", icon: <Gamepad2 size={14} className="text-amber-400" /> },
     { name: "All Categories", cat: "All", icon: <LayoutGrid size={14} className="text-amber-400" /> },
   ];
-
   const visualCategories = [
     { name: "Gadgets & Electronics", cat: "Gadgets & Electronics", img: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=150&q=80" },
     { name: "Phones & Accessories", cat: "Phones & Accessories", img: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=150&q=80" },
@@ -608,7 +546,6 @@ export default function NexaStore() {
     { name: "Baby & Kids", cat: "Baby & Kids", img: "https://images.unsplash.com/photo-1558060370-d644479cb6f7?w=150&q=80" },
     { name: "All Products", cat: "All", img: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=150&q=80" },
   ];
-
   // ডাটাবেসে থাকা সবগুলো ক্যাটাগরির ডাইনামিক ট্যাব (যাতে কাস্টম ক্যাটাগরি দিলেও অটো চলে আসে)
   const dynamicCategoryTabs = [
     "All",
@@ -624,16 +561,13 @@ export default function NexaStore() {
       ])
     )
   ];
-
   const galleryImages = getProductGallery(viewingProduct);
   const detectedBrand = getProductBrand(viewingProduct);
   const socialProof = getProductSocialProof(viewingProduct);
-
   // প্রোডাক্ট কার্ড রেন্ডার করার কমন ফাংশন (যাতে সব জায়গায় Real Price, Discount Price, Offer এবং Out of Stock নিখুঁত দেখায়)
   const renderProductCard = (item: any) => {
     const itemProof = getProductSocialProof(item);
     const isOut = item.isOutOfStock;
-
     return (
       <div 
         key={item.id} 
@@ -649,14 +583,12 @@ export default function NexaStore() {
               alt={item.name} 
               className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 ${isOut ? 'grayscale-[40%]' : ''}`}
             />
-
             {/* 🔥 এডমিন প্যানেলের আসল Offer Badge অথবা সঠিক % ডিসকাউন্ট (ভুয়া -40% আর আসবে না!) */}
             {item.offerBadge && (
               <span className="absolute top-1.5 right-1.5 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
                 {item.offerBadge}
               </span>
             )}
-
             {/* 📦 In Stock / Out of Stock ব্যাজ */}
             <span
               className={`absolute bottom-1.5 left-1.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded backdrop-blur-xs border ${
@@ -668,16 +600,13 @@ export default function NexaStore() {
               {isOut ? '❌ Out of Stock' : '✓ In Stock'}
             </span>
           </div>
-
           {/* ক্যাটাগরি ট্যাগ */}
           <span className="text-[9px] text-amber-400/80 font-semibold block truncate mb-0.5">
             {item.category}
           </span>
-
           <h4 className="text-xs font-semibold text-gray-200 line-clamp-1 mb-1 group-hover:text-amber-400 transition">
             {item.name}
           </h4>
-
           {/* 💰 এডমিন প্যানেলের আসল দাম (Real Price) ও ছাড়ের দাম (Discount Price) */}
           <div className="flex items-baseline gap-1.5 flex-wrap">
             <span className="text-amber-400 font-black text-sm">
@@ -689,13 +618,11 @@ export default function NexaStore() {
               </span>
             )}
           </div>
-
           <div className="flex items-center text-amber-400 text-[10px] mt-0.5 mb-2">
             <Star size={10} fill="currentColor" />
             <span className="ml-1 text-gray-400">{itemProof.ratingScore} ({itemProof.ratingCount})</span>
           </div>
         </div>
-
         {isOut ? (
           <button
             type="button"
@@ -724,10 +651,8 @@ export default function NexaStore() {
       </div>
     );
   };
-
   return (
     <div className="min-h-screen bg-[#080808] text-white font-sans selection:bg-amber-500 selection:text-black pb-24">
-
       {/* 🖼️ FULL SCREEN IMAGE LIGHTBOX */}
       {isImageZoomOpen && viewingProduct && (
         <div 
@@ -763,7 +688,6 @@ export default function NexaStore() {
           <p className="text-xs text-gray-300 mt-3 font-semibold text-center max-w-md">{viewingProduct.name}</p>
         </div>
       )}
-
       {/* 🛍️ CART DRAWER */}
       {isCartOpen && (
         <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xs flex justify-end">
@@ -778,7 +702,6 @@ export default function NexaStore() {
                   <X size={20} />
                 </button>
               </div>
-
               <div className="mt-4 space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                 {cart.length === 0 ? (
                   <p className="text-center text-gray-500 text-xs py-10">আপনার কার্ট খালি রয়েছে।</p>
@@ -803,7 +726,6 @@ export default function NexaStore() {
                 )}
               </div>
             </div>
-
             {cart.length > 0 && (
               <div className="border-t border-amber-500/20 pt-4">
                 <div className="flex justify-between items-center mb-3">
@@ -826,7 +748,6 @@ export default function NexaStore() {
           </div>
         </div>
       )}
-
       {/* 📦 VIP CHECKOUT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[130] flex items-center justify-center p-4">
@@ -836,7 +757,6 @@ export default function NexaStore() {
                 <X size={20} />
               </button>
             )}
-
             {orderSuccess ? (
               <div className="text-center py-8">
                 <CheckCircle2 size={64} className="text-emerald-400 mx-auto mb-3 animate-bounce" />
@@ -892,7 +812,6 @@ export default function NexaStore() {
                       placeholder="বাসা নং, রোড, বাজার, থানা, জেলা..." 
                     />
                   </div>
-
                   {/* 💎 ভিআইপি পেমেন্ট মেথড কার্ড */}
                   <div className="pt-1">
                     <label className="block text-xs font-semibold text-gray-300 mb-2">পেমেন্ট মেথড সিলেক্ট করুন *</label>
@@ -919,7 +838,6 @@ export default function NexaStore() {
                           <p className="text-[9px] text-gray-400 mt-0.5">হাতে পেয়ে পেমেন্ট</p>
                         </div>
                       </button>
-
                       {/* bKash Card */}
                       <button
                         type="button"
@@ -941,7 +859,6 @@ export default function NexaStore() {
                           <p className="text-[9px] text-pink-300/80 mt-0.5">Send Money</p>
                         </div>
                       </button>
-
                       {/* Nagad Card */}
                       <button
                         type="button"
@@ -964,7 +881,6 @@ export default function NexaStore() {
                         </div>
                       </button>
                     </div>
-
                     {/* 🔥 আসল বিকাশ/নগদ গেটওয়ে বক্স */}
                     {paymentMethod !== 'cod' && (
                       <div className={`mt-3 rounded-xl overflow-hidden border transition-all duration-300 ${
@@ -986,7 +902,6 @@ export default function NexaStore() {
                             ৳{payableAmount}
                           </span>
                         </div>
-
                         <div className="p-3.5 space-y-3">
                           <div className="bg-black/40 border border-white/10 rounded-lg p-2.5 flex items-center justify-between">
                             <div>
@@ -1007,12 +922,10 @@ export default function NexaStore() {
                               {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
                             </button>
                           </div>
-
                           <div className="text-[11px] text-gray-300 space-y-1 bg-white/5 p-2.5 rounded-lg">
                             <p>১. উপরের নাম্বারে <b className="text-white">৳{payableAmount}</b> টাকা <b className="text-amber-400">Send Money</b> করুন।</p>
                             <p>২. টাকা পাঠানোর পর মেসেজে পাওয়া <b className="text-white">Transaction ID</b> বা যে নাম্বার থেকে পাঠিয়েছেন তার শেষ ৪ ডিজিট নিচে লিখুন:</p>
                           </div>
-
                           <div>
                             <input
                               type="text"
@@ -1031,7 +944,6 @@ export default function NexaStore() {
                       </div>
                     )}
                   </div>
-
                   {/* টোটাল সামারি বার */}
                   <div className="bg-amber-950/40 p-2.5 rounded-lg flex items-center justify-between text-xs text-amber-200 font-semibold border border-amber-500/30">
                     <span>{paymentMethod === 'cod' ? 'ডেলিভারির সময় দেবেন:' : 'মোট পরিশোধযোগ্য:'}</span>
@@ -1057,7 +969,6 @@ export default function NexaStore() {
           </div>
         </div>
       )}
-
       {/* 👑 1. TOP UTILITY BAR */}
       <div className="bg-[#050505] text-gray-400 text-[11px] border-b border-amber-950/40">
         <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-1.5 flex justify-between items-center gap-2">
@@ -1077,7 +988,6 @@ export default function NexaStore() {
           </div>
         </div>
       </div>
-
       {/* 👑 2. MAIN HEADER */}
       <header className="bg-[#0c0a07] border-b border-amber-500/20 sticky top-0 z-50 shadow-md">
         <div className="max-w-[1340px] mx-auto px-3 md:px-4 py-2.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5 md:gap-4">
@@ -1087,14 +997,12 @@ export default function NexaStore() {
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-widest text-white ml-1">{settings.store_name}</h1>
           </div>
-
           <div onClick={() => setIsCartOpen(true)} className="relative cursor-pointer p-1 order-2 md:order-3">
             <ShoppingCart size={22} className="text-amber-400 hover:text-amber-300 transition" />
             <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center border-2 border-black">
               {cart.reduce((a, b) => a + b.qty, 0)}
             </span>
           </div>
-
           {/* 🔍 লাইভ সার্চ ইনপুট */}
           <form onSubmit={handleSearchSubmit} className="w-full md:w-auto md:flex-1 max-w-xl md:mx-2 relative order-3 md:order-2">
             <input 
@@ -1122,7 +1030,6 @@ export default function NexaStore() {
           </form>
         </div>
       </header>
-
       {/* ===================================================================== */}
       {/* 🛍️ REAL DARAZ APP & WEB STYLE PRODUCT DETAILS PAGE */}
       {/* ===================================================================== */}
@@ -1170,7 +1077,6 @@ export default function NexaStore() {
               </button>
             </div>
           </div>
-
           {/* MAIN DARAZ PRODUCT CARD */}
           <div className="bg-[#110e09] border border-amber-500/25 rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 lg:grid-cols-12">
             
@@ -1185,7 +1091,6 @@ export default function NexaStore() {
                   alt={viewingProduct.name} 
                   className={`w-full h-full object-cover transition-transform duration-300 ${galleryImages[activeImageIdx]?.imgClass || ''}`}
                 />
-
                 {galleryImages.length > 1 && (
                   <>
                     <button
@@ -1210,12 +1115,10 @@ export default function NexaStore() {
                     </button>
                   </>
                 )}
-
                 <div className="absolute bottom-3 right-3 bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/15">
                   {activeImageIdx + 1}/{galleryImages.length}
                 </div>
               </div>
-
               {/* নিচে ৪টি থাম্বনেইল ছবি */}
               <div className="grid grid-cols-4 gap-2.5 mt-3">
                 {galleryImages.map((imgObj: (typeof galleryImages)[number], idx: number) => (
@@ -1238,7 +1141,6 @@ export default function NexaStore() {
                 ))}
               </div>
             </div>
-
             {/* 2. MIDDLE COLUMN: PRICE, STOCK STATUS, TITLE & ACTIONS */}
             <div className="lg:col-span-5 p-3.5 sm:p-5 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-amber-500/15">
               <div>
@@ -1272,7 +1174,6 @@ export default function NexaStore() {
                     )}
                   </div>
                 </div>
-
                 {/* 🏷️ PRODUCT TITLE */}
                 <div className="mb-2.5">
                   <h1 className="text-base sm:text-lg md:text-xl font-extrabold text-white leading-snug">
@@ -1282,7 +1183,6 @@ export default function NexaStore() {
                     {viewingProduct.name}
                   </h1>
                 </div>
-
                 {/* ⭐ DYNAMIC RATING, SOLD & AUTO-BRAND ROW */}
                 <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-gray-300 pb-3 mb-3 border-b border-amber-500/15">
                   <div className="flex items-center gap-1">
@@ -1303,7 +1203,6 @@ export default function NexaStore() {
                     Brand: <b className="text-amber-400">{detectedBrand}</b>
                   </span>
                 </div>
-
                 {/* 🎁 VOUCHER / PROMO TAGS */}
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   {viewingProduct.hasDiscount && (
@@ -1315,7 +1214,6 @@ export default function NexaStore() {
                     <ShieldCheck size={12} className="text-emerald-400" /> 100% Authentic
                   </span>
                 </div>
-
                 {/* Brand, Category & Stock Spec Strip */}
                 <div className="grid grid-cols-3 gap-2 bg-[#16120c] border border-amber-500/15 rounded-xl p-2.5 mb-4 text-xs">
                   <div>
@@ -1333,7 +1231,6 @@ export default function NexaStore() {
                     </span>
                   </div>
                 </div>
-
                 {/* 🔢 QUANTITY SELECTOR */}
                 <div className="flex items-center justify-between bg-[#16120c] border border-amber-500/20 rounded-xl px-3.5 py-2 mb-4">
                   <span className="text-xs font-bold text-gray-300">Quantity (পরিমাণ)</span>
@@ -1356,7 +1253,6 @@ export default function NexaStore() {
                   </div>
                 </div>
               </div>
-
               {/* 🛒 ACTION BUTTONS */}
               {viewingProduct.isOutOfStock ? (
                 <button
@@ -1391,7 +1287,6 @@ export default function NexaStore() {
                 </div>
               )}
             </div>
-
             {/* 3. RIGHT COLUMN: DELIVERY, WARRANTY & OFFICIAL SELLER CARD */}
             <div className="lg:col-span-3 p-3.5 sm:p-5 bg-[#14100b] flex flex-col justify-between space-y-4">
               <div className="space-y-3">
@@ -1401,7 +1296,6 @@ export default function NexaStore() {
                     <MapPin size={12} /> Bangladesh
                   </span>
                 </div>
-
                 <div className="flex items-start gap-2.5 text-xs">
                   <Truck size={16} className="text-amber-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
@@ -1409,7 +1303,6 @@ export default function NexaStore() {
                     <p className="text-[11px] text-gray-400">ঢাকায় ১-২ দিন, ঢাকার বাইরে ২-৪ দিন</p>
                   </div>
                 </div>
-
                 <div className="flex items-start gap-2.5 text-xs">
                   <ShieldCheck size={16} className="text-emerald-400 shrink-0 mt-0.5" />
                   <div>
@@ -1417,7 +1310,6 @@ export default function NexaStore() {
                     <p className="text-[11px] text-gray-400">পণ্য হাতে পেয়ে দেখে পেমেন্ট করুন</p>
                   </div>
                 </div>
-
                 <div className="border-t border-amber-500/15 pt-3 space-y-2.5">
                   <span className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider block">Return & Warranty</span>
                   <div className="flex items-start gap-2.5 text-xs">
@@ -1436,7 +1328,6 @@ export default function NexaStore() {
                   </div>
                 </div>
               </div>
-
               {/* 🏪 OFFICIAL STORE CARD */}
               <div className="bg-[#1b160f] border border-amber-500/25 rounded-xl p-3 space-y-2.5">
                 <div className="flex items-center gap-2.5">
@@ -1481,7 +1372,6 @@ export default function NexaStore() {
               </div>
             </div>
           </div>
-
           {/* ⭐ RATINGS & REVIEWS + PRODUCT DESCRIPTION */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
             <div className="lg:col-span-6 bg-[#110e09] border border-amber-500/20 rounded-2xl p-4 sm:p-5">
@@ -1498,7 +1388,6 @@ export default function NexaStore() {
                 <p>✅ <b>রিটার্ন পলিসি:</b> পণ্যে কোনো সমস্যা থাকলে ৭ দিনের মধ্যে সহজ রিপ্লেসমেন্ট সুবিধা।</p>
               </div>
             </div>
-
             <div className="lg:col-span-6 bg-[#110e09] border border-amber-500/20 rounded-2xl p-4 sm:p-5">
               <div className="flex items-center justify-between border-b border-amber-500/15 pb-2.5 mb-3">
                 <div>
@@ -1511,7 +1400,6 @@ export default function NexaStore() {
                   <Star size={13} fill="currentColor" /> {socialProof.ratingScore} / 5.0
                 </div>
               </div>
-
               <div className="space-y-2.5 text-xs">
                 {socialProof.reviews.map((rev, index) => (
                   <div key={index} className="bg-[#18130c] border border-amber-500/15 rounded-xl p-3">
@@ -1533,7 +1421,6 @@ export default function NexaStore() {
               </div>
             </div>
           </div>
-
           {/* 🔥 "YOU MAY ALSO LIKE" */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3 bg-[#110e0a] border border-amber-500/20 rounded-xl px-3.5 py-2.5">
@@ -1553,12 +1440,10 @@ export default function NexaStore() {
                 সব দেখুন →
               </button>
             </div>
-
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
               {products.filter(p => p.id !== viewingProduct.id).map((item) => renderProductCard(item))}
             </div>
           </div>
-
           {/* 📱 MOBILE STICKY BOTTOM BAR */}
           <div className="fixed bottom-0 left-0 right-0 z-[115] lg:hidden bg-[#100d08]/95 backdrop-blur-md border-t border-amber-500/30 px-3 py-2 flex items-center gap-2 shadow-[0_-8px_25px_rgba(0,0,0,0.85)]">
             <button
@@ -1568,7 +1453,6 @@ export default function NexaStore() {
               <Store size={17} className="text-amber-400" />
               <span className="text-[10px] font-bold mt-0.5">Store</span>
             </button>
-
             <a
               href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`হ্যালো, আমি "${viewingProduct.name}" সম্পর্কে জানতে চাই।`)}`}
               target="_blank"
@@ -1578,7 +1462,6 @@ export default function NexaStore() {
               <MessageCircle size={17} className="text-[#25D366]" />
               <span className="text-[10px] font-bold mt-0.5">Chat</span>
             </a>
-
             {viewingProduct.isOutOfStock ? (
               <button
                 type="button"
@@ -1595,7 +1478,6 @@ export default function NexaStore() {
                 >
                   <ShoppingCart size={14} /> Add to Cart
                 </button>
-
                 <button
                   onClick={() => {
                     const unitPrice = viewingProduct.sellingPrice;
@@ -1648,7 +1530,6 @@ export default function NexaStore() {
                   ))}
                 </ul>
               </div>
-
               {/* Right Banner */}
               <div className={`lg:col-span-9 rounded-2xl relative overflow-hidden border-2 border-amber-500/40 shadow-xl ${
                 settings.hero_image 
@@ -1665,7 +1546,6 @@ export default function NexaStore() {
                   <>
                     <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
                     <div className="absolute top-0 right-0 w-80 h-32 border-t-2 border-r-2 border-amber-400/40 rounded-tr-2xl pointer-events-none" />
-
                     <div className="relative z-10 max-w-[62%] sm:max-w-sm md:max-w-md">
                       <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest inline-block mb-1 sm:mb-2">
                         {settings.store_name || 'NEXA'}
@@ -1686,7 +1566,6 @@ export default function NexaStore() {
                         Shop Now <ArrowRight size={13} />
                       </button>
                     </div>
-
                     <div className="absolute right-0 sm:right-4 md:right-16 bottom-0 top-0 w-[42%] sm:w-auto flex items-end justify-end pointer-events-none">
                       <img 
                         src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80" 
@@ -1697,9 +1576,7 @@ export default function NexaStore() {
                   </>
                 )}
               </div>
-
             </div>
-
             {/* ⚡ 4. গোল্ডেন অফার স্ট্রিপ */}
             <div className="mt-4 bg-gradient-to-r from-[#0c0904] via-[#1a1308] to-[#0c0904] rounded-2xl p-3 md:p-3.5 border border-amber-500/40 shadow-lg shadow-amber-500/10 flex flex-wrap items-center justify-between gap-4 text-white">
               <div className="flex items-center gap-3">
@@ -1711,7 +1588,6 @@ export default function NexaStore() {
                   <p className="text-[11px] text-amber-400 font-semibold">Live Deals Now</p>
                 </div>
               </div>
-
               <div className="hidden lg:flex items-center gap-3 border-x border-amber-500/20 px-8">
                 <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400">
                   <Gift size={22} className="animate-pulse" />
@@ -1723,7 +1599,6 @@ export default function NexaStore() {
                   <p className="text-[11px] text-gray-400 font-medium">Cash on Delivery Available</p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3 ml-auto">
                 <div className="flex items-center gap-2">
                   <Crown size={22} className="text-amber-400 fill-amber-400" />
@@ -1740,9 +1615,7 @@ export default function NexaStore() {
                 </button>
               </div>
             </div>
-
           </div>
-
           {/* ⚡ 5. FLASH SALE PRODUCTS */}
           <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-8">
             <div className="flex items-center justify-between mb-3">
@@ -1760,12 +1633,10 @@ export default function NexaStore() {
                 Shop All Products <ArrowRight size={12} />
               </button>
             </div>
-
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
               {products.slice(0, 6).map((item) => renderProductCard(item))}
             </div>
           </div>
-
           {/* 🔲 6. CATEGORIES SECTION (Gadgets & Electronics সহ সব ক্যাটাগরি) */}
           <div className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
             <div className="bg-[#110e0a] rounded-2xl p-4 shadow-xl border border-amber-500/20">
@@ -1778,7 +1649,6 @@ export default function NexaStore() {
                   See All <ArrowRight size={12} />
                 </span>
               </div>
-
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
                 {visualCategories.map((cat, i) => (
                   <div 
@@ -1801,7 +1671,6 @@ export default function NexaStore() {
               </div>
             </div>
           </div>
-
           {/* 🔥 7. JUST FOR YOU (ক্যাটাগরি ফিল্টার ট্যাবসহ সব প্রোডাক্ট) */}
           <div id="just-for-you" className="max-w-[1340px] mx-auto px-2 md:px-4 mt-10">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -1820,7 +1689,6 @@ export default function NexaStore() {
                   </p>
                 </div>
               </div>
-
               {(searchQuery || selectedCategory !== 'All') && (
                 <button 
                   onClick={() => { setSearchQuery(''); setSelectedCategory('All'); }}
@@ -1830,7 +1698,6 @@ export default function NexaStore() {
                 </button>
               )}
             </div>
-
             {/* 📂 Dynamic Category Filter Pills (Gadgets & Electronics সহ সব ক্যাটাগরি) */}
             <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-3 no-scrollbar">
               {dynamicCategoryTabs.map((catName) => (
@@ -1847,7 +1714,6 @@ export default function NexaStore() {
                 </button>
               ))}
             </div>
-
             {filteredProducts.length === 0 ? (
               <div className="text-center py-16 bg-[#110e0a] rounded-2xl border border-amber-500/20">
                 <Search size={40} className="text-gray-600 mx-auto mb-3" />
@@ -1868,11 +1734,9 @@ export default function NexaStore() {
           </div>
         </>
       )}
-
       {/* 🧾 8. FOOTER */}
       <footer className="mt-14 bg-[#0b0906] border-t border-amber-500/20">
         <div className="max-w-[1340px] mx-auto px-4 py-10 grid grid-cols-2 md:grid-cols-4 gap-8 text-left">
-
           {/* Brand + Contact */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-4">
@@ -1900,7 +1764,6 @@ export default function NexaStore() {
               <span className="w-7 h-7 rounded-md bg-[#1c1812] border border-amber-500/20 flex items-center justify-center text-gray-400 hover:text-amber-400 hover:border-amber-400/40 transition cursor-pointer"><Music2 size={13} /></span>
             </div>
           </div>
-
           {/* Shop */}
           <div>
             <div className="flex items-center gap-2 mb-4">
@@ -1915,7 +1778,6 @@ export default function NexaStore() {
               <li><button onClick={() => handleSelectCategory('Fashion & Lifestyle')} className="hover:text-amber-400 transition cursor-pointer">Fashion & Lifestyle</button></li>
             </ul>
           </div>
-
           {/* Support */}
           <div>
             <div className="flex items-center gap-2 mb-4">
@@ -1931,7 +1793,6 @@ export default function NexaStore() {
               <li><button onClick={openHelp} className="hover:text-amber-400 transition cursor-pointer">Track Order</button></li>
             </ul>
           </div>
-
           {/* Account + We Accept */}
           <div>
             <div className="flex items-center gap-2 mb-4">
@@ -1944,7 +1805,6 @@ export default function NexaStore() {
               <li><button onClick={openHelp} className="hover:text-amber-400 transition cursor-pointer">Wishlist</button></li>
               <li><button onClick={() => setIsCartOpen(true)} className="hover:text-amber-400 transition cursor-pointer">Shopping Cart</button></li>
             </ul>
-
             <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-wider">We Accept</p>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="bg-[#E2136E] text-white text-[9px] font-black px-2 py-1 rounded">bKash</span>
@@ -1955,7 +1815,6 @@ export default function NexaStore() {
             </div>
           </div>
         </div>
-
         <div className="border-t border-amber-500/15">
           <div className="max-w-[1340px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-gray-500">
             <span>© 2026 {settings.store_name}. All rights reserved.</span>
@@ -1967,7 +1826,6 @@ export default function NexaStore() {
           </div>
         </div>
       </footer>
-
       {/* ⬆️ Scroll to Top */}
       <button
         onClick={scrollToTop}
@@ -1978,7 +1836,6 @@ export default function NexaStore() {
       >
         <ChevronUp size={18} />
       </button>
-
       {/* 💬 "কীভাবে সাহায্য করতে পারি?" পপআপ */}
       {isHelpOpen && (
         <div className={`fixed right-5 z-[140] w-[290px] max-w-[calc(100vw-40px)] bg-white rounded-2xl shadow-2xl overflow-hidden border border-neutral-200 animate-in slide-in-from-bottom-2 duration-200 ${
@@ -1994,7 +1851,6 @@ export default function NexaStore() {
               <X size={16} />
             </button>
           </div>
-
           <div className="divide-y divide-neutral-200">
             <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition group">
               <span className="w-9 h-9 rounded-full bg-[#25D366] flex items-center justify-center text-white shrink-0">
@@ -2006,7 +1862,6 @@ export default function NexaStore() {
               </span>
               <ChevronRight size={15} className="text-neutral-400 group-hover:text-neutral-600" />
             </a>
-
             <a href={MESSENGER_LINK} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition group">
               <span className="w-9 h-9 rounded-full bg-[#0084FF] flex items-center justify-center text-white shrink-0">
                 <Send size={17} />
@@ -2017,7 +1872,6 @@ export default function NexaStore() {
               </span>
               <ChevronRight size={15} className="text-neutral-400 group-hover:text-neutral-600" />
             </a>
-
             <a href={"tel:" + HELPLINE_NUMBER} className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition group">
               <span className="w-9 h-9 rounded-full bg-[#E2136E] flex items-center justify-center text-white shrink-0">
                 <Phone size={17} />
@@ -2031,7 +1885,6 @@ export default function NexaStore() {
           </div>
         </div>
       )}
-
       {/* 🎧 Floating Help Button */}
       <button
         onClick={() => (isHelpOpen ? closeHelp() : openHelp())}
@@ -2042,7 +1895,6 @@ export default function NexaStore() {
       >
         {isHelpOpen ? <X size={22} /> : <Headphones size={22} />}
       </button>
-
     </div>
   );
 }
